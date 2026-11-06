@@ -1,0 +1,13 @@
+let token=localStorage.getItem('windir_admin_token');
+const $=id=>document.getElementById(id);
+$('verify').addEventListener('submit',async e=>{e.preventDefault();$('result').textContent='Checking…';try{const r=await fetch('/api/keys/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('keyInput').value})});const d=await r.json();$('result').textContent=d.message+(d.valid?' · Expires '+new Date(d.expires_at).toLocaleDateString():'');$('result').style.color=d.valid?'#a3e635':'#fb7185'}catch{$('result').textContent='Server unavailable'}});
+$('adminOpen').onclick=()=>{$('modal').classList.remove('hidden');showAuth()};
+$('close').onclick=()=> $('modal').classList.add('hidden');
+function showAuth(){$('loginView').classList.toggle('hidden',!!token);$('dash').classList.toggle('hidden',!token);if(token)loadKeys()}
+$('login').onclick=async()=>{const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});const d=await r.json();if(!r.ok){$('loginErr').textContent=d.error;return}token=d.token;localStorage.setItem('windir_admin_token',token);showAuth()};
+async function loadKeys(){const r=await fetch('/api/admin/keys',{headers:{Authorization:'Bearer '+token}});if(r.status===401){token=null;localStorage.removeItem('windir_admin_token');showAuth();return}const list=await r.json();$('keys').innerHTML=list.map(k=>`<div class="keyitem"><b>${esc(k.label||'Unlabeled')}</b> · ${new Date(k.expires_at).toLocaleDateString()} · ${k.revoked?'REVOKED':'ACTIVE'}<button onclick="revoke(${k.id})">REVOKE</button><br><small>Created ${new Date(k.created_at).toLocaleDateString()}</small></div>`).join('')||'<p class="result">No keys yet.</p>'}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+$('make').onclick=async()=>{const r=await fetch('/api/admin/keys',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({days:$('days').value,label:$('label').value})});const d=await r.json();if(!r.ok){alert(d.error);return}$('newKey').innerHTML=`<div class="keybox">${d.key}<br><button class="ghost" onclick="navigator.clipboard.writeText('${d.key}')">COPY KEY</button></div>`;$('label').value='';loadKeys()};
+window.revoke=async id=>{if(!confirm('Revoke this key?'))return;await fetch('/api/admin/keys/'+id+'/revoke',{method:'POST',headers:{Authorization:'Bearer '+token}});loadKeys()};
+$('logout').onclick=async()=>{await fetch('/api/admin/logout',{method:'POST',headers:{Authorization:'Bearer '+token}});token=null;localStorage.removeItem('windir_admin_token');showAuth()};
+showAuth();
