@@ -1,17 +1,10 @@
-```javascript
 let token = localStorage.getItem('windir_admin_token');
 
 const $ = id => document.getElementById(id);
 
-// CONEXIÓN API
+// API
 async function api(url, options = {}) {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            ...(options.headers || {})
-        }
-    });
-
+    const response = await fetch(url, options);
     const text = await response.text();
 
     let data;
@@ -45,7 +38,6 @@ $('verify').addEventListener('submit', async e => {
 
     result.textContent = 'Checking key...';
     result.style.color = '#c4b5fd';
-
     button.disabled = true;
 
     try {
@@ -54,52 +46,54 @@ $('verify').addEventListener('submit', async e => {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                key: key
-            })
+            body: JSON.stringify({ key })
         });
 
         if (data.valid) {
             result.textContent = 'ACCESS GRANTED · ' +
-                (data.message || 'Key verified successfully') +
-                (data.expires_at
-                    ? ' · Expires ' +
-                    new Date(data.expires_at).toLocaleDateString()
-                    : '');
+                (data.message || 'Key verified successfully');
+
+            if (data.expires_at) {
+                result.textContent += ' · Expires ' +
+                    new Date(data.expires_at).toLocaleDateString();
+            }
 
             result.style.color = '#a3e635';
-
             sessionStorage.setItem('windir_access', 'granted');
-
         } else {
             result.textContent = data.message || 'Invalid or expired key';
             result.style.color = '#fb7185';
-
             sessionStorage.removeItem('windir_access');
         }
 
     } catch (error) {
         result.textContent = 'Server unavailable · ' + error.message;
         result.style.color = '#fb7185';
-
         sessionStorage.removeItem('windir_access');
-
     } finally {
         button.disabled = false;
     }
 });
 
 // ADMIN MODAL
-$('adminOpen').onclick = () => {
-    $('modal').classList.remove('hidden');
+const modal = $('modal');
+
+$('adminOpen').addEventListener('click', () => {
+    modal.classList.remove('hidden');
     showAuth();
-};
+});
 
-$('close').onclick = () => {
-    $('modal').classList.add('hidden');
-};
+$('close').addEventListener('click', () => {
+    modal.classList.add('hidden');
+});
 
-// AUTENTICACIÓN
+modal.addEventListener('click', e => {
+    if (e.target === modal) {
+        modal.classList.add('hidden');
+    }
+});
+
+// AUTH
 function showAuth() {
     $('loginView').classList.toggle('hidden', !!token);
     $('dash').classList.toggle('hidden', !token);
@@ -110,7 +104,7 @@ function showAuth() {
 }
 
 // LOGIN
-$('login').onclick = async () => {
+$('login').addEventListener('click', async () => {
     $('loginErr').textContent = 'Connecting...';
 
     try {
@@ -125,17 +119,17 @@ $('login').onclick = async () => {
         });
 
         token = data.token;
-
         localStorage.setItem('windir_admin_token', token);
 
         $('loginErr').textContent = '';
+        $('password').value = '';
 
         showAuth();
 
     } catch (error) {
         $('loginErr').textContent = error.message;
     }
-};
+});
 
 // CARGAR KEYS
 async function loadKeys() {
@@ -151,29 +145,20 @@ async function loadKeys() {
                 <b>${esc(k.label || 'Unlabeled')}</b>
                 · ${new Date(k.expires_at).toLocaleDateString()}
                 · ${k.revoked ? 'REVOKED' : 'ACTIVE'}
-
                 <button onclick="revoke(${k.id})">REVOKE</button>
-
                 <br>
-
-                <small>
-                    Created ${new Date(k.created_at).toLocaleDateString()}
-                </small>
+                <small>Created ${new Date(k.created_at).toLocaleDateString()}</small>
             </div>
         `).join('') || '<p class="result">No keys yet.</p>';
 
     } catch (error) {
+        $('keys').textContent = error.message;
+
         if (error.message.includes('401')) {
             token = null;
-
             localStorage.removeItem('windir_admin_token');
-
             showAuth();
-
-            return;
         }
-
-        $('keys').textContent = error.message;
     }
 }
 
@@ -189,7 +174,13 @@ function esc(s) {
 }
 
 // GENERAR KEY
-$('make').onclick = async () => {
+$('make').addEventListener('click', async () => {
+    if (!token) {
+        alert('Please login first.');
+        showAuth();
+        return;
+    }
+
     $('make').disabled = true;
 
     try {
@@ -206,22 +197,18 @@ $('make').onclick = async () => {
         });
 
         $('newKey').innerHTML = `
-            <div class="keybox">
-                ${esc(data.key)}
-            </div>
+            <div class="keybox">${esc(data.key)}</div>
         `;
 
         $('label').value = '';
-
         await loadKeys();
 
     } catch (error) {
         alert(error.message);
-
     } finally {
         $('make').disabled = false;
     }
-};
+});
 
 // REVOCAR KEY
 window.revoke = async id => {
@@ -243,7 +230,7 @@ window.revoke = async id => {
 };
 
 // LOGOUT
-$('logout').onclick = async () => {
+$('logout').addEventListener('click', async () => {
     try {
         await api('/api/admin/logout', {
             method: 'POST',
@@ -251,18 +238,14 @@ $('logout').onclick = async () => {
                 Authorization: 'Bearer ' + token
             }
         });
-
     } catch (error) {
         console.error(error);
     }
 
     token = null;
-
     localStorage.removeItem('windir_admin_token');
-
     showAuth();
-};
+});
 
 // INICIAR
 showAuth();
-```
