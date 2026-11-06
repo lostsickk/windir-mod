@@ -11,7 +11,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS keys (
  revoked INTEGER DEFAULT 0, used_by TEXT DEFAULT ''
 )`);
 app.use(express.json());
-app.use(express.static(path.join(__dirname,'public')));
+app.use(express.static(path.join(__dirname,'public'))); app.get('/', (req,res)=>{
+  res.sendFile(path.join(__dirname,'public','index.html'));
+});
 const sessions = new Map();
 const adminPassword = process.env.ADMIN_PASSWORD;
 const sessionSecret = process.env.SESSION_SECRET;
@@ -42,15 +44,3 @@ app.get('/api/admin/keys',auth,(req,res)=>{
 app.post('/api/admin/keys/:id/revoke',auth,(req,res)=>{
  const result=db.prepare('UPDATE keys SET revoked=1 WHERE id=?').run(req.params.id);
  res.json({ok:result.changes>0});
-});
-app.post('/api/keys/verify',(req,res)=>{
- const k=String(req.body.key||'').trim();
- if(!k) return res.status(400).json({valid:false,message:'Enter a key'});
- const row=db.prepare('SELECT expires_at,revoked FROM keys WHERE key_hash=?').get(hash(k));
- if(!row||row.revoked) return res.json({valid:false,message:'Invalid or revoked key'});
- if(Date.now()>Date.parse(row.expires_at)) return res.json({valid:false,message:'Key expired'});
- res.json({valid:true,message:'Key verified — access granted',expires_at:row.expires_at});
-});
-app.get('/api/health',(req,res)=>res.json({ok:true}));
-const port=process.env.PORT||3000;
-app.listen(port,()=>console.log('Windir Mode running on port '+port));
