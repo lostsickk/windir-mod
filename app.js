@@ -34,7 +34,7 @@ $('verify').addEventListener('submit', async e => {
     $('result').textContent = 'Checking…';
 
     try {
-        const data = await api('/api/keys/verify', {
+        const data = await fetch('/api/verify-key',{
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
