@@ -1,3 +1,4 @@
+```javascript
 let token = localStorage.getItem('windir_admin_token');
 
 const $ = id => document.getElementById(id);
@@ -14,6 +15,7 @@ async function api(url, options = {}) {
     const text = await response.text();
 
     let data;
+
     try {
         data = JSON.parse(text);
     } catch {
@@ -31,30 +33,59 @@ async function api(url, options = {}) {
 $('verify').addEventListener('submit', async e => {
     e.preventDefault();
 
-    $('result').textContent = 'Checking…';
+    const result = $('result');
+    const button = $('verify').querySelector('button');
+    const key = $('keyInput').value.trim();
+
+    if (!key) {
+        result.textContent = 'Please enter your access key.';
+        result.style.color = '#fb7185';
+        return;
+    }
+
+    result.textContent = 'Checking key...';
+    result.style.color = '#c4b5fd';
+
+    button.disabled = true;
 
     try {
-        const data = await fetch('/api/verify-key',{
+        const data = await api('/api/verify-key', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                key: $('keyInput').value.trim()
+                key: key
             })
         });
 
-        $('result').textContent = data.valid
-            ? data.message + ' · Expires ' +
-              new Date(data.expires_at).toLocaleDateString()
-            : (data.message || 'Invalid key');
+        if (data.valid) {
+            result.textContent = 'ACCESS GRANTED · ' +
+                (data.message || 'Key verified successfully') +
+                (data.expires_at
+                    ? ' · Expires ' +
+                    new Date(data.expires_at).toLocaleDateString()
+                    : '');
 
-        $('result').style.color =
-            data.valid ? '#a3e635' : '#fb7185';
+            result.style.color = '#a3e635';
+
+            sessionStorage.setItem('windir_access', 'granted');
+
+        } else {
+            result.textContent = data.message || 'Invalid or expired key';
+            result.style.color = '#fb7185';
+
+            sessionStorage.removeItem('windir_access');
+        }
 
     } catch (error) {
-        $('result').textContent = error.message;
-        $('result').style.color = '#fb7185';
+        result.textContent = 'Server unavailable · ' + error.message;
+        result.style.color = '#fb7185';
+
+        sessionStorage.removeItem('windir_access');
+
+    } finally {
+        button.disabled = false;
     }
 });
 
@@ -73,12 +104,14 @@ function showAuth() {
     $('loginView').classList.toggle('hidden', !!token);
     $('dash').classList.toggle('hidden', !token);
 
-    if (token) loadKeys();
+    if (token) {
+        loadKeys();
+    }
 }
 
 // LOGIN
 $('login').onclick = async () => {
-    $('loginErr').textContent = 'Connecting…';
+    $('loginErr').textContent = 'Connecting...';
 
     try {
         const data = await api('/api/admin/login', {
@@ -122,6 +155,7 @@ async function loadKeys() {
                 <button onclick="revoke(${k.id})">REVOKE</button>
 
                 <br>
+
                 <small>
                     Created ${new Date(k.created_at).toLocaleDateString()}
                 </small>
@@ -131,8 +165,11 @@ async function loadKeys() {
     } catch (error) {
         if (error.message.includes('401')) {
             token = null;
+
             localStorage.removeItem('windir_admin_token');
+
             showAuth();
+
             return;
         }
 
@@ -168,7 +205,11 @@ $('make').onclick = async () => {
             })
         });
 
-        $('newKey').textContent = data.key;
+        $('newKey').innerHTML = `
+            <div class="keybox">
+                ${esc(data.key)}
+            </div>
+        `;
 
         $('label').value = '';
 
@@ -176,6 +217,7 @@ $('make').onclick = async () => {
 
     } catch (error) {
         alert(error.message);
+
     } finally {
         $('make').disabled = false;
     }
@@ -209,6 +251,7 @@ $('logout').onclick = async () => {
                 Authorization: 'Bearer ' + token
             }
         });
+
     } catch (error) {
         console.error(error);
     }
@@ -222,3 +265,4 @@ $('logout').onclick = async () => {
 
 // INICIAR
 showAuth();
+```
