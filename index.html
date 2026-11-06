@@ -1,10 +1,111 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WINDIR MODE</title><link rel="stylesheet" href="style.css"></head>
-<body><div class="bg"></div><header><a class="brand" href="#">WINDIR<span> MODE</span></a><button class="ghost" id="adminOpen">ADMIN</button></header>
-<main><section class="hero"><div class="pill">✦ PRIVATE ACCESS SYSTEM</div><h1>WINDIR<br><span>MODE</span></h1><p class="sub">Your access. Your rules.</p><div class="line"></div>
-<div class="panel"><div class="panel-title">KEY ACTIVATION <span class="dot"></span></div><p>Enter the access key provided by the administrator.</p><form id="verify"><input id="keyInput" placeholder="WINDIR-XXXXXXXXXXXX" autocomplete="off" required><button class="primary">VERIFY KEY ↗</button></form><div id="result" class="result"></div></div>
-<div class="foot">SECURE ACCESS · WINDIR MODE</div></section></main>
-<div class="modal hidden" id="modal"><div class="modalbox"><button class="close" id="close">×</button><h2>ADMIN <span>ACCESS</span></h2><div id="loginView"><p>Private administrator panel</p><input id="password" type="password" placeholder="Admin password"><button class="primary" id="login">LOGIN</button><div id="loginErr" class="result"></div></div>
-<div id="dash" class="hidden"><div class="row"><input id="label" placeholder="Label / user (optional)"><select id="days"><option value="1">1 day</option><option value="7" selected>7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option><option value="3650">Permanent (10 years)</option></select></div><button class="primary" id="make">＋ GENERATE KEY</button><div id="newKey"></div><h3>RECENT KEYS</h3><div id="keys"></div><button class="ghost" id="logout">LOG OUT</button></div></div></div>
-<script src="app.js"></script></body></html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>WINDIR MODE</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="bg"></div>
+
+<header>
+    <a class="brand" href="#">WINDIR<span> MODE</span></a>
+    <button class="ghost" id="adminOpen" type="button">ADMIN</button>
+</header>
+
+<main>
+    <section class="hero">
+        <div class="pill">✦ PRIVATE ACCESS SYSTEM</div>
+
+        <h1>WINDIR<br><span>MODE</span></h1>
+
+        <p class="sub">Your access. Your rules.</p>
+
+        <div class="line"></div>
+
+        <div class="panel">
+            <div class="panel-title">
+                KEY ACTIVATION <span class="dot"></span>
+            </div>
+
+            <p>Enter the access key provided by the administrator.</p>
+
+            <form id="verify">
+                <input id="keyInput"
+                       placeholder="WINDIR-XXXXXXXXXXXX"
+                       autocomplete="off"
+                       required>
+
+                <button class="primary" type="submit">
+                    VERIFY KEY ↗
+                </button>
+            </form>
+
+            <div id="result" class="result"></div>
+        </div>
+
+        <div class="foot">SECURE ACCESS · WINDIR MODE</div>
+    </section>
+</main>
+
+<div class="modal hidden" id="modal">
+    <div class="modalbox">
+
+        <button class="close" id="close" type="button">×</button>
+
+        <h2>ADMIN <span>ACCESS</span></h2>
+
+        <div id="loginView">
+            <p>Private administrator panel</p>
+
+            <input id="password"
+                   type="password"
+                   placeholder="Admin password">
+
+            <button class="primary" id="login" type="button">
+                LOGIN
+            </button>
+
+            <div id="loginErr" class="result"></div>
+        </div>
+
+        <div id="dash" class="hidden">
+
+            <div class="row">
+                <input id="label"
+                       placeholder="Label / user (optional)">
+
+                <select id="days">
+                    <option value="1">1 day</option>
+                    <option value="7" selected>7 days</option>
+                    <option value="30">30 days</option>
+                    <option value="90">90 days</option>
+                    <option value="365">1 year</option>
+                    <option value="3650">Permanent (10 years)</option>
+                </select>
+            </div>
+
+            <button class="primary" id="make" type="button">
+                ＋ GENERATE KEY
+            </button>
+
+            <div id="newKey"></div>
+
+            <h3>RECENT KEYS</h3>
+
+            <div id="keys"></div>
+
+            <button class="ghost" id="logout" type="button">
+                LOG OUT
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<script src="app.js?v=2" defer></script>
+
+</body>
+</html>
