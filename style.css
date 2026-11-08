@@ -731,3 +731,114 @@ body.reduced-motion * {
     flex-direction: column;
   }
 }
+
+/* ==============================
+   FIX ADMIN LOGIN / PASSWORD
+   ============================== */
+
+#modal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  visibility: visible;
+  opacity: 1;
+}
+
+#modal[hidden] {
+  display: none !important;
+}
+
+#modal .admin-box {
+  display: block;
+  visibility: visible;
+  opacity: 1;
+}
+
+/* LOGIN ADMIN */
+
+#modal #loginView {
+  display: block;
+  visibility: visible;
+  opacity: 1;
+  width: 100%;
+}
+
+#modal #loginView h2,
+#modal #loginView p,
+#modal #loginView label {
+  display: block;
+  visibility: visible;
+  color: #ffffff;
+}
+
+#modal #loginView input#password {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 100% !important;
+  height: 52px !important;
+  padding: 15px !important;
+  margin: 15px 0 !important;
+  background: #080707 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border: 1px solid #ff2638 !important;
+  border-radius: 10px !important;
+  font-size: 16px !important;
+}
+
+#modal #loginView button#login {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 100%;
+}
+
+/* ERRORES LOGIN */
+
+#modal #loginErr {
+  color: #ff5264;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+/* PANEL ADMIN */
+
+#modal #dash {
+  width: 100%;
+}
+
+#modal #dash input,
+#modal #dash select {
+  display: block;
+  width: 100%;
+  color: white;
+  background: #080707;
+}
+
+#modal #dash button {
+  cursor: pointer;
+}
+
+#modal #keys {
+  display: block;
+  width: 100%;
+}
+
+/* FIX MOVIL ADMIN */
+
+@media (max-width: 520px) {
+  #modal {
+    padding: 12px;
+  }
+
+  #modal .admin-box {
+    width: 100%;
+    max-width: 100%;
+    padding: 20px;
+  }
+
+  #modal #loginView input#password {
+    font-size: 16px !important;
+  }
+}
