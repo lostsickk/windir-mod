@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -15,10 +16,16 @@
   <div class="brand">WINDIR <span>PROXY</span>
     <small>PRIVATE ACCESS SYSTEM</small>
   </div>
-  <button class="text-btn" id="headerLogout" hidden>LOG OUT</button>
+
+  <div class="top-actions">
+    <button class="text-btn" id="adminOpen">ADMIN</button>
+    <button class="text-btn" id="headerLogout" hidden>LOG OUT</button>
+  </div>
 </header>
 
 <main>
+
+<!-- ACTIVATION -->
 <section id="activation" class="activation">
   <div class="eyebrow"><span class="pulse"></span> SECURE KEY ACTIVATION</div>
   <h1>WINDIR <span>PROXY</span></h1>
@@ -38,7 +45,9 @@
   <div class="tiny-footer">WINDIR PROXY · AUTHORIZED ACCESS ONLY</div>
 </section>
 
+<!-- DASHBOARD -->
 <section id="dashboard" hidden>
+
   <div class="welcome">
     <div>
       <div class="eyebrow"><span class="pulse"></span> ACCESS VERIFIED</div>
@@ -55,6 +64,7 @@
     <button class="tab" data-tab="setting">Setting</button>
   </nav>
 
+  <!-- PROXY -->
   <section class="tab-panel" id="panel-proxy">
     <div class="section-heading">
       <div class="eyebrow">CONNECTION</div>
@@ -67,10 +77,12 @@
         <small>STATUS</small>
         <strong class="green"><i></i> Active</strong>
       </article>
+
       <article class="info-card">
         <small>YOUR KEY</small>
         <strong id="proxyKey">Verified</strong>
       </article>
+
       <article class="info-card">
         <small>KEY EXPIRATION</small>
         <strong id="proxyExpiry">—</strong>
@@ -83,42 +95,50 @@
     </div>
   </section>
 
+  <!-- MAIN -->
   <section class="tab-panel" id="panel-main" hidden>
     <div class="section-heading">
       <div class="eyebrow">CONTROL CENTER</div>
       <h2>Main</h2>
     </div>
+
     <div class="option-list">
       <label class="option">
         <span><b>Notifications</b><small>Dashboard notices</small></span>
         <input type="checkbox" class="switch" data-pref="notifications">
         <i></i>
       </label>
+
       <label class="option">
         <span><b>Compact layout</b><small>Tighter card layout</small></span>
         <input type="checkbox" class="switch" data-pref="compact">
         <i></i>
       </label>
+
       <label class="option">
         <span><b>Reduced animations</b><small>Reduce interface motion</small></span>
         <input type="checkbox" class="switch" data-pref="reducedMotion">
         <i></i>
       </label>
     </div>
+
     <button class="primary" id="savePrefs">SAVE PREFERENCES</button>
     <div id="prefsMsg" class="notice"></div>
   </section>
 
+  <!-- NEWS -->
   <section class="tab-panel" id="panel-news" hidden>
     <div class="section-heading">
       <div class="eyebrow">LATEST UPDATES</div>
       <h2>Proxy News</h2>
     </div>
+
     <article class="news-card">
       <span class="tag">WELCOME</span>
       <h3>WINDIR PROXY</h3>
       <p>Keep your access key private.</p>
     </article>
+
     <article class="news-card">
       <span class="tag">SECURITY</span>
       <h3>Protect your session</h3>
@@ -126,26 +146,74 @@
     </article>
   </section>
 
+  <!-- SETTING -->
   <section class="tab-panel" id="panel-setting" hidden>
     <div class="section-heading">
       <div class="eyebrow">ACCOUNT</div>
       <h2>Setting</h2>
     </div>
+
     <article class="info-card">
       <small>YOUR KEY</small>
       <strong id="settingKey">Verified</strong>
     </article>
+
     <article class="info-card">
       <small>KEY EXPIRATION</small>
       <strong id="settingExpiry">—</strong>
     </article>
+
     <button class="danger-btn" id="logout">LOG OUT</button>
   </section>
 
   <div class="tiny-footer">WINDIR PROXY · SECURE SESSION</div>
 </section>
+
 </main>
 
-<script src="app.js?v=3" defer></script>
+<!-- ADMIN MODAL -->
+<div id="modal" class="admin-modal" hidden>
+  <div class="admin-box">
+
+    <button id="close" class="admin-close">✕</button>
+
+    <!-- ADMIN LOGIN -->
+    <div id="loginView">
+      <div class="eyebrow">PRIVATE ADMINISTRATION</div>
+      <h2>WINDIR ADMIN</h2>
+      <p>Administrator access</p>
+
+      <input id="password" type="password" placeholder="Admin password">
+
+      <button id="login" class="primary">LOGIN</button>
+
+      <div id="loginErr" class="notice"></div>
+    </div>
+
+    <!-- ADMIN DASHBOARD -->
+    <div id="dash" hidden>
+      <div class="eyebrow">CONTROL CENTER</div>
+      <h2>KEY GENERATOR</h2>
+
+      <label for="label">KEY NAME</label>
+      <input id="label" placeholder="Key name">
+
+      <label for="days">DURATION (DAYS)</label>
+      <input id="days" type="number" value="7" min="1">
+
+      <button id="make" class="primary">GENERATE KEY</button>
+
+      <label for="newKey">GENERATED KEY</label>
+      <input id="newKey" readonly placeholder="Generated key">
+
+      <div id="keys"></div>
+
+      <button id="logoutAdmin" class="danger-btn">LOGOUT ADMIN</button>
+    </div>
+
+  </div>
+</div>
+
+<script src="app.js?v=4" defer></script>
 </body>
 </html>
