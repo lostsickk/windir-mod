@@ -1,424 +1,260 @@
-const $ = (id) => document.getElementById(id);
+const STORAGE_KEY = "windir_saved_key";
+const SESSION_KEY = "windir_session_key";
+const SESSION_IP = "windir_session_ip";
 
-let adminToken = null;
-let currentKey = "";
-let currentExpiry = "";
-let currentLabel = "";
+const keyInput = document.getElementById("keyInput");
+const saveKey = document.getElementById("saveKey");
+const clearKey = document.getElementById("clearKey");
+const loginButton = document.getElementById("loginButton");
+const status = document.getElementById("status");
+const ipInput = document.getElementById("ipInput");
+const detectIpButton = document.getElementById("detectIpButton");
+const ipStatus = document.getElementById("ipStatus");
 
-async function api(url, options = {}) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {})
-  };
+function showStatus(message, type) {
+  status.textContent = message;
+  status.className = "status show " + type;
+}
 
-  if (adminToken) {
-    headers.Authorization = `Bearer ${adminToken}`;
+function hideStatus() {
+  status.textContent = "";
+  status.className = "status";
+}
+
+function updateButton() {
+  loginButton.disabled = keyInput.value.trim().length === 0;
+}
+
+function showIpStatus(message, success = false) {
+  ipStatus.textContent = message;
+  ipStatus.style.color = success ? "#55e889" : "rgba(255,255,255,0.38)";
+}
+
+function loadSavedKey() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return;
+  keyInput.value = saved;
+  saveKey.checked = true;
+  clearKey.style.display = "block";
+  updateButton();
+}
+
+function removeSavedKey() {
+  localStorage.removeItem(STORAGE_KEY);
+  saveKey.checked = false;
+  clearKey.style.display = "none";
+}
+
+keyInput.addEventListener("input", () => {
+  updateButton();
+  const current = keyInput.value.trim();
+  const saved = localStorage.getItem(STORAGE_KEY);
+
+  if (saved && current !== saved) {
+    saveKey.checked = false;
+    clearKey.style.display = "none";
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data.error || data.message || "Request failed");
+  if (status.classList.contains("error") || status.classList.contains("success")) {
+    hideStatus();
   }
 
-  return data;
-}
+  showIpStatus("");
+});
 
-function message(element, text, type = "") {
-  if (!element) return;
-  element.textContent = text;
-  element.className = "notice " + type;
-}
-
-function showDashboard(key, expiry) {
-  currentKey = key || "";
-  currentExpiry = expiry || "—";
-
-  $("activation").hidden = true;
-  $("dashboard").hidden = false;
-  $("headerLogout").hidden = false;
-
-  $("proxyKey").textContent = currentKey;
-  $("settingKey").textContent = currentKey;
-  $("proxyExpiry").textContent = currentExpiry;
-  $("settingExpiry").textContent = currentExpiry;
-}
-
-function logoutUser() {
-  currentKey = "";
-  currentExpiry = "";
-
-  $("dashboard").hidden = true;
-  $("activation").hidden = false;
-  $("headerLogout").hidden = true;
-
-  $("keyInput").value = "";
-  message($("result"), "");
-  localStorage.removeItem("windir_session");
-}
-
-function openAdmin() {
-  $("modal").hidden = false;
-  $("loginView").hidden = !adminToken;
-  $("dash").hidden = !adminToken;
-
-  if (adminToken) {
-    loadKeys();
-  }
-}
-
-function closeAdmin() {
-  $("modal").hidden = true;
-}
-
-async function loginAdmin() {
-  const password = $("password").value.trim();
-
-  if (!password) {
-    message($("loginErr"), "Enter admin password");
-    return;
-  }
-
-  try {
-    const data = await api("/api/admin/login", {
-      method: "POST",
-      body: JSON.stringify({ password })
-    });
-
-    adminToken = data.token;
-
-    $("loginView").hidden = true;
-    $("dash").hidden = false;
-    $("password").value = "";
-
-    await loadKeys();
-  } catch (error) {
-    message($("loginErr"), error.message);
-  }
-}
-
-async function loadKeys() {
-  try {
-    const data = await api("/api/admin/keys");
-
-    const keys = Array.isArray(data)
-      ? data
-      : data.keys || [];
-
-    renderKeys(keys);
-  } catch (error) {
-    $("keys").innerHTML =
-      `<p class="notice">${escapeHTML(error.message)}</p>`;
-  }
-}
-
-async function generateKey() {
-  const label = $("label").value.trim() || "WINDIR";
-  const days = Number($("days").value);
-
-  if (!Number.isInteger(days) || days < 1) {
-    alert("Enter a valid duration in days.");
-    return;
-  }
-
-  $("make").disabled = true;
-  $("make").textContent = "GENERATING...";
-
-  try {
-    const data = await api("/api/admin/keys", {
-      method: "POST",
-      body: JSON.stringify({ label, days })
-    });
-
-    const key = data.key || data.licenseKey || data.code;
-
+saveKey.addEventListener("change", () => {
+  if (saveKey.checked) {
+    const key = keyInput.value.trim();
     if (!key) {
-      throw new Error("The server did not return the generated key.");
+      saveKey.checked = false;
+      return;
     }
-
-    $("newKey").value = key;
-
-    await loadKeys();
-
-    $("newKey").focus();
-    $("newKey").select();
-  } catch (error) {
-    alert(error.message);
-  } finally {
-    $("make").disabled = false;
-    $("make").textContent = "GENERATE KEY";
+    localStorage.setItem(STORAGE_KEY, key);
+    clearKey.style.display = "block";
+  } else {
+    removeSavedKey();
   }
-}
+});
 
-function renderKeys(keys) {
-  const container = $("keys");
+clearKey.addEventListener("click", () => {
+  removeSavedKey();
+  keyInput.value = "";
+  updateButton();
+  hideStatus();
+});
 
-  if (!keys.length) {
-    container.innerHTML =
-      '<div class="key-empty">No keys generated yet.</div>';
-    return;
-  }
+ipInput.addEventListener("input", () => {
+  ipInput.value = ipInput.value.replace(/[^0-9.]/g, "").slice(0, 15);
+  showIpStatus("");
+});
 
-  const active = [];
-  const revoked = [];
+async function detectClientIp() {
+  detectIpButton.disabled = true;
+  const original = detectIpButton.textContent;
+  detectIpButton.textContent = "Detecting...";
+  showIpStatus("Detecting your public IPv4...");
 
-  keys.forEach((item) => {
-    const isRevoked =
-      item.revoked === true ||
-      item.revoked_at ||
-      item.status === "revoked";
-
-    if (isRevoked) {
-      revoked.push(item);
-    } else {
-      active.push(item);
-    }
-  });
-
-  container.innerHTML = `
-    <div class="key-section">
-      <h3>ACTIVE KEYS <span>${active.length}</span></h3>
-      ${active.map(keyCard).join("")}
-    </div>
-
-    <div class="key-section">
-      <h3>REVOKED KEYS <span>${revoked.length}</span></h3>
-      ${revoked.map(keyCard).join("") || 
-        '<div class="key-empty">No revoked keys.</div>'}
-    </div>
-  `;
-}
-
-function keyCard(item) {
-  const key = item.key || item.license_key || "";
-  const label = item.label || "WINDIR";
-  const expiry = formatDate(item.expires_at || item.expiry);
-  const revoked =
-    item.revoked === true ||
-    item.revoked_at ||
-    item.status === "revoked";
-
-  return `
-    <article class="key-card">
-      <div class="key-card-top">
-        <span class="key-label">${escapeHTML(label)}</span>
-        <span class="key-status ${revoked ? "revoked" : "active"}">
-          ${revoked ? "REVOKED" : "ACTIVE"}
-        </span>
-      </div>
-
-      <div class="key-value">${escapeHTML(key)}</div>
-
-      <div class="key-expiry">Expires: ${escapeHTML(expiry)}</div>
-
-      <div class="key-actions">
-        <button class="copy-btn"
-          onclick="copyKey('${escapeJS(key)}')">
-          COPY KEY
-        </button>
-
-        ${!revoked && item.id ? `
-          <button class="revoke-btn"
-            onclick="revokeKey(${Number(item.id)})">
-            REVOKE
-          </button>
-        ` : ""}
-      </div>
-    </article>
-  `;
-}
-
-async function copyKey(key) {
   try {
-    await navigator.clipboard.writeText(key);
-    alert("KEY COPIED!");
+    const res = await fetch("https://api.ipify.org?format=json", { cache: "no-store" });
+    if (!res.ok) throw new Error("failed");
+    const data = await res.json();
+    const ip = String(data.ip || "").replace(/[^0-9.]/g, "").slice(0, 15);
+    if (!ip) throw new Error("empty");
+    ipInput.value = ip;
+    showIpStatus("IPv4 detected successfully.", true);
   } catch {
-    const input = document.createElement("textarea");
-    input.value = key;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand("copy");
-    input.remove();
-    alert("KEY COPIED!");
+    showIpStatus("Unable to detect your IPv4.");
+  } finally {
+    detectIpButton.disabled = false;
+    detectIpButton.textContent = original;
   }
 }
 
-async function revokeKey(id) {
-  if (!confirm("Are you sure you want to revoke this key?")) {
+detectIpButton.addEventListener("click", detectClientIp);
+
+function validIp(ip) {
+  const parts = ip.split(".");
+  return parts.length === 4 && parts.every(p => p !== "" && Number(p) <= 255);
+}
+
+loginButton.addEventListener("click", async () => {
+  const key = keyInput.value.trim();
+  const ip = ipInput.value.trim();
+
+  if (!key) {
+    showStatus("Please enter your key.", "error");
+    keyInput.focus();
     return;
   }
 
-  try {
-    await api(`/api/admin/keys/${id}/revoke`, {
-      method: "POST",
-      body: JSON.stringify({})
-    });
-
-    await loadKeys();
-  } catch (error) {
-    alert(error.message);
-  }
-}
-
-async function logoutAdmin() {
-  try {
-    await api("/api/admin/logout", {
-      method: "POST",
-      body: JSON.stringify({})
-    });
-  } catch {}
-
-  adminToken = null;
-
-  $("modal").hidden = true;
-  $("loginView").hidden = false;
-  $("dash").hidden = true;
-  $("password").value = "";
-  $("newKey").value = "";
-}
-
-function formatDate(value) {
-  if (!value) return "—";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
+  if (!ip || !validIp(ip)) {
+    showStatus("Please enter or auto-detect a valid IPv4.", "error");
+    ipInput.focus();
+    return;
   }
 
-  return date.toLocaleDateString();
-}
-
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, char => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  }[char]));
-}
-
-function escapeJS(value) {
-  return String(value)
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'")
-    .replace(/\n/g, "\\n");
-}
-
-// VERIFY KEY
-$("verify").addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const key = $("keyInput").value.trim();
-
-  if (!key) return;
-
-  $("verifyBtn").disabled = true;
-  $("verifyBtn").textContent = "VERIFYING...";
+  loginButton.disabled = true;
+  detectIpButton.disabled = true;
+  showStatus("Verifying your key and IPv4...", "loading");
 
   try {
-    const data = await api("/api/verify-key", {
+    const res = await fetch("/api/verify-key", {
       method: "POST",
-      body: JSON.stringify({ key })
+      headers: { "Content-Type": "application/json", "X-Device": ip },
+      body: JSON.stringify({ key, ip })
     });
 
-    if (!data.valid && !data.success) {
-      throw new Error(data.error || "Invalid key");
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || !data || !data.valid) {
+      showStatus(data && data.message ? data.message : "Invalid or expired key.", "error");
+      return;
     }
 
-    const expiry = data.expires_at || data.expiry || "—";
+    if (saveKey.checked) localStorage.setItem(STORAGE_KEY, key);
 
-    localStorage.setItem("windir_session", JSON.stringify({
-      key,
-      expiry
-    }));
+    showStatus("Your key has been verified successfully.", "success");
 
-    message($("result"), "KEY VERIFIED", "success");
-    showDashboard(key, formatDate(expiry));
-  } catch (error) {
-    message($("result"), error.message);
+    sessionStorage.setItem(SESSION_KEY, key);
+    sessionStorage.setItem(SESSION_IP, ip);
+    sessionStorage.setItem("windir_verified", JSON.stringify({ key, ip, data }));
+
+    setTimeout(() => window.location.replace("/activate"), 450);
+
+  } catch {
+    showStatus("Unable to connect to the server. Please try again.", "error");
   } finally {
-    $("verifyBtn").disabled = false;
-    $("verifyBtn").innerHTML = 'VERIFY KEY <span>↗</span>';
+    detectIpButton.disabled = false;
+    updateButton();
   }
 });
 
-// ADMIN
-$("adminOpen").addEventListener("click", openAdmin);
-$("close").addEventListener("click", closeAdmin);
-$("login").addEventListener("click", loginAdmin);
-$("make").addEventListener("click", generateKey);
-$("logoutAdmin").addEventListener("click", logoutAdmin);
+loadSavedKey();
 
-$("password").addEventListener("keydown", event => {
-  if (event.key === "Enter") loginAdmin();
-});
+/* partículas */
+(function () {
+  const canvas = document.getElementById("particles");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  let w = 0, h = 0, count = 85;
+  const ps = [];
 
-$("modal").addEventListener("click", event => {
-  if (event.target === $("modal")) closeAdmin();
-});
-
-// USER LOGOUT
-$("logout").addEventListener("click", logoutUser);
-$("headerLogout").addEventListener("click", logoutUser);
-
-// TABS
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(item =>
-      item.classList.remove("active")
-    );
-
-    document.querySelectorAll(".tab-panel").forEach(panel =>
-      panel.hidden = true
-    );
-
-    tab.classList.add("active");
-
-    const panel = $("panel-" + tab.dataset.tab);
-
-    if (panel) panel.hidden = false;
-  });
-});
-
-// PREFERENCES
-$("savePrefs").addEventListener("click", () => {
-  const preferences = {};
-
-  document.querySelectorAll("[data-pref]").forEach(input => {
-    preferences[input.dataset.pref] = input.checked;
-  });
-
-  localStorage.setItem("windir_preferences",
-    JSON.stringify(preferences));
-
-  message($("prefsMsg"), "Preferences saved!", "success");
-});
-
-// RESTORE PREFERENCES
-try {
-  const preferences = JSON.parse(
-    localStorage.getItem("windir_preferences") || "{}"
-  );
-
-  document.querySelectorAll("[data-pref]").forEach(input => {
-    input.checked = !!preferences[input.dataset.pref];
-  });
-} catch {}
-
-// RESTORE SESSION
-try {
-  const session = JSON.parse(
-    localStorage.getItem("windir_session") || "null"
-  );
-
-  if (session && session.key) {
-    showDashboard(session.key, session.expiry);
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = window.innerWidth;
+    h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    count = w <= 600 ? 48 : w <= 1000 ? 68 : 90;
   }
-} catch {}
+
+  function build() {
+    ps.length = 0;
+    for (let i = 0; i < count; i++) {
+      ps.push({
+        x: Math.random() * w, y: Math.random() * h,
+        r: Math.random() * 2.7 + 1.1,
+        vx: (Math.random() - .5) * .38,
+        vy: (Math.random() - .5) * .38,
+        a: Math.random() * .45 + .35,
+        p: Math.random() * Math.PI * 2,
+        s: Math.random() * .015 + .006
+      });
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+
+    for (const p of ps) {
+      p.x += p.vx; p.y += p.vy; p.p += p.s;
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      if (p.y < -10) p.y = h + 10;
+      if (p.y > h + 10) p.y = -10;
+
+      const alpha = p.a * (0.82 + Math.sin(p.p) * 0.18);
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 5);
+      g.addColorStop(0, `rgba(255,0,0,${alpha * .45})`);
+      g.addColorStop(1, "rgba(255,0,0,0)");
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 5, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,0,0,${alpha})`;
+      ctx.fill();
+    }
+
+    const max = w <= 600 ? 125 : 165;
+    for (let i = 0; i < ps.length; i++) {
+      for (let j = i + 1; j < ps.length; j++) {
+        const dx = ps[i].x - ps[j].x, dy = ps[i].y - ps[j].y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < max) {
+          ctx.beginPath();
+          ctx.moveTo(ps[i].x, ps[i].y);
+          ctx.lineTo(ps[j].x, ps[j].y);
+          ctx.strokeStyle = `rgba(255,0,0,${0.42 * (1 - d / max)})`;
+          ctx.lineWidth = w <= 600 ? 1.35 : 1.8;
+          ctx.stroke();
+        }
+      }
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  resize(); build(); draw();
+
+  let t;
+  window.addEventListener("resize", () => {
+    clearTimeout(t);
+    t = setTimeout(() => { resize(); build(); }, 150);
+  });
+})();
