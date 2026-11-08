@@ -1,218 +1,54 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!doctype html><html lang="en"><head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#080303">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#050505">
 <title>WINDIR PROXY</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<div class="network-bg"></div>
+<link rel="stylesheet" href="/style.css">
+</head><body>
 
-<header class="topbar">
-  <div class="brandmark">W</div>
-  <div class="brand">WINDIR <span>PROXY</span>
-    <small>PRIVATE ACCESS SYSTEM</small>
-  </div>
+<canvas id="particles"></canvas>
+<div class="ambient"></div>
 
-  <div class="top-actions">
-    <button class="text-btn" id="adminOpen">ADMIN</button>
-    <button class="text-btn" id="headerLogout" hidden>LOG OUT</button>
-  </div>
-</header>
-
-<main>
-
-<!-- ACTIVATION -->
-<section id="activation" class="activation">
-  <div class="eyebrow"><span class="pulse"></span> SECURE KEY ACTIVATION</div>
-  <h1>WINDIR <span>PROXY</span></h1>
-  <p class="subtitle">Enter your access key to continue.</p>
-
-  <div class="glass-card activation-card">
-    <form id="verify">
-      <label for="keyInput">ACCESS KEY</label>
-      <input id="keyInput" placeholder="WINDIR-XXXXXXXXXXXX" autocomplete="off" required>
-      <button class="primary" type="submit" id="verifyBtn">
-        VERIFY KEY <span>↗</span>
-      </button>
-    </form>
-    <div id="result" class="notice"></div>
-  </div>
-
-  <div class="tiny-footer">WINDIR PROXY · AUTHORIZED ACCESS ONLY</div>
-</section>
-
-<!-- DASHBOARD -->
-<section id="dashboard" hidden>
-
-  <div class="welcome">
-    <div>
-      <div class="eyebrow"><span class="pulse"></span> ACCESS VERIFIED</div>
-      <h1>Welcome to <span>WINDIR</span></h1>
-      <p class="subtitle">Your session is active.</p>
+<div class="page">
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon"><img class="code-icon" src="/avatar.jpg" alt="WINDIR"></div>
+      <div class="brand-name">WINDIR <span>PROXY</span></div>
     </div>
-    <div class="status-badge"><i></i> ACTIVE</div>
-  </div>
+  </header>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="proxy">Proxy</button>
-    <button class="tab" data-tab="main">Main</button>
-    <button class="tab" data-tab="news">News</button>
-    <button class="tab" data-tab="setting">Setting</button>
-  </nav>
+  <main class="content">
+    <div class="login-box">
+      <div class="panel">
 
-  <!-- PROXY -->
-  <section class="tab-panel" id="panel-proxy">
-    <div class="section-heading">
-      <div class="eyebrow">CONNECTION</div>
-      <h2>Proxy Info</h2>
-      <p>Connection details and session status.</p>
+        <div class="input-wrapper">
+          <div class="input-glow"></div>
+          <input id="keyInput" class="key-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Enter your key">
+        </div>
+
+        <div class="ip-row">
+          <input id="ipInput" class="ip-input" type="text" inputmode="decimal" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="15" placeholder="Your IPv4 address">
+          <button id="detectIpButton" class="detect-button" type="button">Auto-detect</button>
+        </div>
+
+        <div id="ipStatus" class="ip-status"></div>
+
+        <div class="save-row">
+          <label class="save-label">
+            <input id="saveKey" class="save-checkbox" type="checkbox">
+            <span>Remember my key</span>
+          </label>
+          <button id="clearKey" class="clear-key" type="button">Clear saved key</button>
+        </div>
+
+        <button id="loginButton" class="login-button" type="button" disabled>Enter Key</button>
+
+        <div id="status" class="status"></div>
+
+      </div>
     </div>
-
-    <div class="info-grid">
-      <article class="info-card">
-        <small>STATUS</small>
-        <strong class="green"><i></i> Active</strong>
-      </article>
-
-      <article class="info-card">
-        <small>YOUR KEY</small>
-        <strong id="proxyKey">Verified</strong>
-      </article>
-
-      <article class="info-card">
-        <small>KEY EXPIRATION</small>
-        <strong id="proxyExpiry">—</strong>
-      </article>
-    </div>
-
-    <div class="glass-card tip-card">
-      <h3>Connection guide</h3>
-      <p>Use the proxy address and port supplied by your administrator.</p>
-    </div>
-  </section>
-
-  <!-- MAIN -->
-  <section class="tab-panel" id="panel-main" hidden>
-    <div class="section-heading">
-      <div class="eyebrow">CONTROL CENTER</div>
-      <h2>Main</h2>
-    </div>
-
-    <div class="option-list">
-      <label class="option">
-        <span><b>Notifications</b><small>Dashboard notices</small></span>
-        <input type="checkbox" class="switch" data-pref="notifications">
-        <i></i>
-      </label>
-
-      <label class="option">
-        <span><b>Compact layout</b><small>Tighter card layout</small></span>
-        <input type="checkbox" class="switch" data-pref="compact">
-        <i></i>
-      </label>
-
-      <label class="option">
-        <span><b>Reduced animations</b><small>Reduce interface motion</small></span>
-        <input type="checkbox" class="switch" data-pref="reducedMotion">
-        <i></i>
-      </label>
-    </div>
-
-    <button class="primary" id="savePrefs">SAVE PREFERENCES</button>
-    <div id="prefsMsg" class="notice"></div>
-  </section>
-
-  <!-- NEWS -->
-  <section class="tab-panel" id="panel-news" hidden>
-    <div class="section-heading">
-      <div class="eyebrow">LATEST UPDATES</div>
-      <h2>Proxy News</h2>
-    </div>
-
-    <article class="news-card">
-      <span class="tag">WELCOME</span>
-      <h3>WINDIR PROXY</h3>
-      <p>Keep your access key private.</p>
-    </article>
-
-    <article class="news-card">
-      <span class="tag">SECURITY</span>
-      <h3>Protect your session</h3>
-      <p>Log out when you finish using this device.</p>
-    </article>
-  </section>
-
-  <!-- SETTING -->
-  <section class="tab-panel" id="panel-setting" hidden>
-    <div class="section-heading">
-      <div class="eyebrow">ACCOUNT</div>
-      <h2>Setting</h2>
-    </div>
-
-    <article class="info-card">
-      <small>YOUR KEY</small>
-      <strong id="settingKey">Verified</strong>
-    </article>
-
-    <article class="info-card">
-      <small>KEY EXPIRATION</small>
-      <strong id="settingExpiry">—</strong>
-    </article>
-
-    <button class="danger-btn" id="logout">LOG OUT</button>
-  </section>
-
-  <div class="tiny-footer">WINDIR PROXY · SECURE SESSION</div>
-</section>
-
-</main>
-
-<!-- ADMIN MODAL -->
-<div id="modal" class="admin-modal" hidden>
-  <div class="admin-box">
-
-    <button id="close" class="admin-close">✕</button>
-
-    <!-- ADMIN LOGIN -->
-    <div id="loginView">
-      <div class="eyebrow">PRIVATE ADMINISTRATION</div>
-      <h2>WINDIR ADMIN</h2>
-      <p>Administrator access</p>
-
-      <input id="password" type="password" placeholder="Admin password">
-
-      <button id="login" class="primary">LOGIN</button>
-
-      <div id="loginErr" class="notice"></div>
-    </div>
-
-    <!-- ADMIN DASHBOARD -->
-    <div id="dash" hidden>
-      <div class="eyebrow">CONTROL CENTER</div>
-      <h2>KEY GENERATOR</h2>
-
-      <label for="label">KEY NAME</label>
-      <input id="label" placeholder="Key name">
-
-      <label for="days">DURATION (DAYS)</label>
-      <input id="days" type="number" value="7" min="1">
-
-      <button id="make" class="primary">GENERATE KEY</button>
-
-      <label for="newKey">GENERATED KEY</label>
-      <input id="newKey" readonly placeholder="Generated key">
-
-      <div id="keys"></div>
-
-      <button id="logoutAdmin" class="danger-btn">LOGOUT ADMIN</button>
-    </div>
-
-  </div>
+  </main>
 </div>
 
-<script src="app.js?v=4" defer></script>
-</body>
-</html>
+<script src="/app.js"></script>
+</body></html>
