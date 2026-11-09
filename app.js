@@ -1,600 +1,260 @@
-const express = require('express');
-const Database = require('better-sqlite3');
-const crypto = require('crypto');
-const path = require('path');
-const fs = require('fs');
-const net = require('net');
+const STORAGE_KEY = "windir_saved_key";
+const SESSION_KEY = "windir_session_key";
+const SESSION_IP = "windir_session_ip";
 
-const app = express();
+const keyInput = document.getElementById("keyInput");
+const saveKey = document.getElementById("saveKey");
+const clearKey = document.getElementById("clearKey");
+const loginButton = document.getElementById("loginButton");
+const status = document.getElementById("status");
+const ipInput = document.getElementById("ipInput");
+const detectIpButton = document.getElementById("detectIpButton");
+const ipStatus = document.getElementById("ipStatus");
 
-app.disable('x-powered-by');
-app.use(express.json({ limit: '20kb' }));
-
-// DATABASE
-const dbPath = process.env.DB_PATH || path.join(__dirname, 'windir.db');
-const db = new Database(dbPath);
-
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS keys (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  key_hash TEXT UNIQUE NOT NULL,
-  label TEXT DEFAULT '',
-  expires_at TEXT,
-  created_at TEXT NOT NULL,
-  revoked INTEGER DEFAULT 0,
-  used_by TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS admins (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL COLLATE NOCASE,
-  password_hash TEXT NOT NULL,
-  salt TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('OWNER', 'ADMIN')),
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS key_devices (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  key_id INTEGER NOT NULL,
-  device_id TEXT NOT NULL,
-  ip TEXT DEFAULT '',
-  created_at TEXT NOT NULL,
-  last_seen TEXT NOT NULL,
-  revoked INTEGER DEFAULT 0,
-  UNIQUE(key_id, device_id),
-  FOREIGN KEY(key_id) REFERENCES keys(id)
-);
-`);
-
-// Add max_devices to an existing keys table without deleting old keys.
-const keyColumns = db.pragma('table_info(keys)');
-if (!keyColumns.some(column => column.name === 'max_devices')) {
-  db.exec('ALTER TABLE keys ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1');
+function showStatus(message, type) {
+  status.textContent = message;
+  status.className = "status show " + type;
 }
 
-// SECURITY HELPERS
-const sessions = new Map();
-const SESSION_DURATION = 12 * 60 * 60 * 1000;
-
-function makeToken() {
-  return crypto.randomBytes(32).toString('hex');
+function hideStatus() {
+  status.textContent = "";
+  status.className = "status";
 }
 
-function hashKey(value) {
-  return crypto.createHash('sha256').update(value).digest('hex');
+function updateButton() {
+  loginButton.disabled = keyInput.value.trim().length === 0;
 }
 
-function makePasswordHash(password, salt) {
-  return crypto.scryptSync(password, salt, 64).toString('hex');
+function showIpStatus(message, success = false) {
+  ipStatus.textContent = message;
+  ipStatus.style.color = success ? "#55e889" : "rgba(255,255,255,0.38)";
 }
 
-function verifyPassword(password, salt, storedHash) {
-  const actual = Buffer.from(makePasswordHash(password, salt), 'hex');
-  const expected = Buffer.from(storedHash, 'hex');
-
-  return actual.length === expected.length &&
-    crypto.timingSafeEqual(actual, expected);
+function loadSavedKey() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return;
+  keyInput.value = saved;
+  saveKey.checked = true;
+  clearKey.style.display = "block";
+  updateButton();
 }
 
-function createAdmin(username, password, role) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const passwordHash = makePasswordHash(password, salt);
-
-  db.prepare(`
-    INSERT INTO admins (username, password_hash, salt, role, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(
-    username,
-    passwordHash,
-    salt,
-    role,
-    new Date().toISOString()
-  );
+function removeSavedKey() {
+  localStorage.removeItem(STORAGE_KEY);
+  saveKey.checked = false;
+  clearKey.style.display = "none";
 }
 
-// Create the first OWNER only when the admins table is empty.
-const adminCount = db.prepare('SELECT COUNT(*) AS total FROM admins').get().total;
+keyInput.addEventListener("input", () => {
+  updateButton();
+  const current = keyInput.value.trim();
+  const saved = localStorage.getItem(STORAGE_KEY);
 
-if (adminCount === 0) {
-  const ownerUser = String(process.env.ADMIN_USER || '').trim();
-  const ownerPassword = String(process.env.ADMIN_PASSWORD || '');
-
-  if (
-    /^[a-zA-Z0-9_.-]{3,30}$/.test(ownerUser) &&
-    ownerPassword.length >= 12
-  ) {
-    createAdmin(ownerUser, ownerPassword, 'OWNER');
-    console.log('Initial OWNER account created.');
-  } else {
-    console.warn(
-      'No OWNER exists. Set ADMIN_USER and ADMIN_PASSWORD in Render.'
-    );
-  }
-}
-
-// ADMIN AUTHENTICATION
-function auth(req, res, next) {
-  const token = (req.headers.authorization || '')
-    .replace(/^Bearer\s+/i, '');
-
-  const session = sessions.get(token);
-
-  if (!session || session.expiresAt < Date.now()) {
-    if (token) sessions.delete(token);
-    return res.status(401).json({ error: 'Admin login required' });
+  if (saved && current !== saved) {
+    saveKey.checked = false;
+    clearKey.style.display = "none";
   }
 
-  const admin = db.prepare(
-    'SELECT id, username, role FROM admins WHERE id = ?'
-  ).get(session.adminId);
-
-  if (!admin) {
-    sessions.delete(token);
-    return res.status(401).json({ error: 'Admin account unavailable' });
+  if (status.classList.contains("error") || status.classList.contains("success")) {
+    hideStatus();
   }
 
-  req.admin = admin;
-  req.sessionToken = token;
-  next();
-}
-
-function ownerOnly(req, res, next) {
-  if (!req.admin || req.admin.role !== 'OWNER') {
-    return res.status(403).json({ error: 'OWNER permission required' });
-  }
-
-  next();
-}
-
-// PROTECT PRIVATE FILES
-app.use((req, res, next) => {
-  const filename = path.basename(req.path).toLowerCase();
-
-  const blocked = [
-    'server.js',
-    'package.json',
-    'package-lock.json',
-    'windir.db',
-    'windir.db-wal',
-    'windir.db-shm'
-  ];
-
-  if (
-    blocked.includes(filename) ||
-    req.path.includes('/.git') ||
-    req.path.includes('/node_modules') ||
-    filename.startsWith('.env') ||
-    /\.(sqlite|sqlite3|db)$/i.test(filename)
-  ) {
-    return res.sendStatus(404);
-  }
-
-  next();
+  showIpStatus("");
 });
 
-// WEBSITE FILES
-app.use(express.static(__dirname, {
-  index: false,
-  dotfiles: 'deny'
-}));
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Keep a compatible activation page if one exists.
-app.get('/activate', (req, res, next) => {
-  const candidates = [
-    path.join(__dirname, 'activate.html'),
-    path.join(__dirname, 'activate', 'index.html')
-  ];
-
-  const page = candidates.find(file => fs.existsSync(file));
-
-  if (page) return res.sendFile(page);
-  next();
-});
-
-// HEALTH CHECK
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, message: 'WINDIR PROXY server is running' });
-});
-
-// ADMIN LOGIN
-app.post('/api/admin/login', (req, res) => {
-  const username = String(req.body.username || '').trim();
-  const password = String(req.body.password || '');
-
-  const admin = db.prepare(
-    'SELECT * FROM admins WHERE username = ? COLLATE NOCASE'
-  ).get(username);
-
-  if (
-    !admin ||
-    !verifyPassword(password, admin.salt, admin.password_hash)
-  ) {
-    return res.status(401).json({ error: 'Incorrect username or password' });
-  }
-
-  const token = makeToken();
-
-  sessions.set(token, {
-    adminId: admin.id,
-    expiresAt: Date.now() + SESSION_DURATION
-  });
-
-  res.json({
-    token,
-    username: admin.username,
-    role: admin.role
-  });
-});
-
-// CURRENT ADMIN
-app.get('/api/admin/me', auth, (req, res) => {
-  res.json({
-    id: req.admin.id,
-    username: req.admin.username,
-    role: req.admin.role
-  });
-});
-
-// ADMIN LOGOUT
-app.post('/api/admin/logout', auth, (req, res) => {
-  sessions.delete(req.sessionToken);
-  res.json({ ok: true });
-});
-
-// CREATE ADMIN - OWNER ONLY
-app.post('/api/admin/users', auth, ownerOnly, (req, res) => {
-  const username = String(req.body.username || '').trim();
-  const password = String(req.body.password || '');
-
-  if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) {
-    return res.status(400).json({
-      error: 'Username must be 3-30 letters, numbers, dots, _ or -'
-    });
-  }
-
-  if (password.length < 12 || password.length > 200) {
-    return res.status(400).json({
-      error: 'Password must contain at least 12 characters'
-    });
-  }
-
-  try {
-    createAdmin(username, password, 'ADMIN');
-    res.json({ ok: true, message: 'Administrator created' });
-  } catch (error) {
-    if (String(error.code).includes('SQLITE_CONSTRAINT')) {
-      return res.status(409).json({ error: 'Username already exists' });
-    }
-    throw error;
-  }
-});
-
-// LIST ADMINS - OWNER ONLY
-app.get('/api/admin/users', auth, ownerOnly, (req, res) => {
-  const users = db.prepare(`
-    SELECT id, username, role, created_at
-    FROM admins
-    ORDER BY id ASC
-  `).all();
-
-  res.json(users);
-});
-
-// DELETE ADMIN - OWNER ONLY
-app.delete('/api/admin/users/:id', auth, ownerOnly, (req, res) => {
-  const id = Number(req.params.id);
-
-  if (!Number.isInteger(id) || id < 1) {
-    return res.status(400).json({ error: 'Invalid admin id' });
-  }
-
-  const target = db.prepare(
-    'SELECT id, role FROM admins WHERE id = ?'
-  ).get(id);
-
-  if (!target) {
-    return res.status(404).json({ error: 'Administrator not found' });
-  }
-
-  if (target.role === 'OWNER' || target.id === req.admin.id) {
-    return res.status(403).json({
-      error: 'You cannot delete the OWNER account'
-    });
-  }
-
-  db.prepare('DELETE FROM admins WHERE id = ?').run(id);
-
-  // End any sessions belonging to the deleted admin.
-  for (const [token, session] of sessions.entries()) {
-    if (session.adminId === id) sessions.delete(token);
-  }
-
-  res.json({ ok: true });
-});
-
-// GENERATE KEY - OWNER AND ADMIN
-app.post('/api/admin/keys', auth, (req, res) => {
-  const days = Number(req.body.days || 7);
-  const maxDevices = Number(req.body.maxDevices ?? 1);
-  const label = String(req.body.label || '').trim().slice(0, 80);
-
-  if (!Number.isInteger(days) || days < 1 || days > 3650) {
-    return res.status(400).json({ error: 'Days must be 1-3650' });
-  }
-
-  // 0 means unlimited devices.
-  if (
-    !Number.isInteger(maxDevices) ||
-    maxDevices < 0 ||
-    maxDevices > 100
-  ) {
-    return res.status(400).json({
-      error: 'Devices must be 0 (unlimited) or between 1 and 100'
-    });
-  }
-
-  const key = 'WINDIR-' +
-    crypto.randomBytes(12).toString('hex').toUpperCase();
-
-  const expires = new Date(
-    Date.now() + days * 86400000
-  ).toISOString();
-
-  const result = db.prepare(`
-    INSERT INTO keys (
-      key_hash, label, expires_at, created_at, max_devices
-    )
-    VALUES (?, ?, ?, ?, ?)
-  `).run(
-    hashKey(key),
-    label,
-    expires,
-    new Date().toISOString(),
-    maxDevices
-  );
-
-  res.json({
-    key,
-    id: result.lastInsertRowid,
-    expires_at: expires,
-    max_devices: maxDevices
-  });
-});
-
-// LIST KEYS
-app.get('/api/admin/keys', auth, (req, res) => {
-  const rows = db.prepare(`
-    SELECT
-      k.id,
-      k.label,
-      k.expires_at,
-      k.created_at,
-      k.revoked,
-      k.max_devices,
-      (
-        SELECT COUNT(*)
-        FROM key_devices d
-        WHERE d.key_id = k.id AND d.revoked = 0
-      ) AS devices_used
-    FROM keys k
-    ORDER BY k.id DESC
-    LIMIT 200
-  `).all();
-
-  res.json(rows);
-});
-
-// REVOKE KEY
-app.post('/api/admin/keys/:id/revoke', auth, (req, res) => {
-  const id = Number(req.params.id);
-
-  if (!Number.isInteger(id) || id < 1) {
-    return res.status(400).json({ error: 'Invalid key id' });
-  }
-
-  const result = db.prepare(
-    'UPDATE keys SET revoked = 1 WHERE id = ?'
-  ).run(id);
-
-  res.json({ ok: result.changes > 0 });
-});
-
-// LIST DEVICES FOR A KEY
-app.get('/api/admin/keys/:id/devices', auth, (req, res) => {
-  const id = Number(req.params.id);
-
-  if (!Number.isInteger(id) || id < 1) {
-    return res.status(400).json({ error: 'Invalid key id' });
-  }
-
-  const devices = db.prepare(`
-    SELECT id, device_id, ip, created_at, last_seen, revoked
-    FROM key_devices
-    WHERE key_id = ?
-    ORDER BY id DESC
-  `).all(id);
-
-  res.json(devices);
-});
-
-// RELEASE / REVOKE A DEVICE
-app.delete(
-  '/api/admin/keys/:id/devices/:deviceId',
-  auth,
-  (req, res) => {
-    const id = Number(req.params.id);
-    const deviceId = String(req.params.deviceId || '');
-
-    if (!Number.isInteger(id) || id < 1 || !deviceId) {
-      return res.status(400).json({ error: 'Invalid device information' });
-    }
-
-    const result = db.prepare(`
-      UPDATE key_devices
-      SET revoked = 1
-      WHERE key_id = ? AND device_id = ?
-    `).run(id, deviceId);
-
-    res.json({ ok: result.changes > 0 });
-  }
-);
-
-// VERIFY CUSTOMER KEY
-function verifyKey(req, res, next) {
-  try {
-    const key = String(req.body.key || '').trim();
-    const ip = String(req.body.ip || '').trim();
-    const deviceId = String(req.body.deviceId || '').trim();
-    const remember = req.body.remember === true;
-
+saveKey.addEventListener("change", () => {
+  if (saveKey.checked) {
+    const key = keyInput.value.trim();
     if (!key) {
-      return res.status(400).json({
-        valid: false,
-        message: 'Enter a key'
-      });
+      saveKey.checked = false;
+      return;
     }
+    localStorage.setItem(STORAGE_KEY, key);
+    clearKey.style.display = "block";
+  } else {
+    removeSavedKey();
+  }
+});
 
-    if (net.isIP(ip) !== 4) {
-      return res.status(400).json({
-        valid: false,
-        message: 'Enter a valid IPv4 address'
-      });
-    }
+clearKey.addEventListener("click", () => {
+  removeSavedKey();
+  keyInput.value = "";
+  updateButton();
+  hideStatus();
+});
 
-    const record = db.prepare(`
-      SELECT id, expires_at, revoked, max_devices
-      FROM keys
-      WHERE key_hash = ?
-    `).get(hashKey(key));
+ipInput.addEventListener("input", () => {
+  ipInput.value = ipInput.value.replace(/[^0-9.]/g, "").slice(0, 15);
+  showIpStatus("");
+});
 
-    if (!record || record.revoked) {
-      return res.json({
-        valid: false,
-        message: 'Invalid or revoked key'
-      });
-    }
+async function detectClientIp() {
+  detectIpButton.disabled = true;
+  const original = detectIpButton.textContent;
+  detectIpButton.textContent = "Detecting...";
+  showIpStatus("Detecting your public IPv4...");
 
-    if (
-      !record.expires_at ||
-      Date.now() > Date.parse(record.expires_at)
-    ) {
-      return res.json({
-        valid: false,
-        message: 'Key expired'
-      });
-    }
-
-    let devicesUsed = db.prepare(`
-      SELECT COUNT(*) AS total
-      FROM key_devices
-      WHERE key_id = ? AND revoked = 0
-    `).get(record.id).total;
-
-    // A device is registered only when Remember my key is checked.
-    if (remember) {
-      if (!/^[a-zA-Z0-9_-]{16,128}$/.test(deviceId)) {
-        return res.status(400).json({
-          valid: false,
-          message: 'Invalid device identifier'
-        });
-      }
-
-      const existing = db.prepare(`
-        SELECT id, revoked
-        FROM key_devices
-        WHERE key_id = ? AND device_id = ?
-      `).get(record.id, deviceId);
-
-      if (existing && existing.revoked) {
-        return res.json({
-          valid: false,
-          message: 'This device has been revoked'
-        });
-      }
-
-      if (!existing) {
-        if (
-          record.max_devices !== 0 &&
-          devicesUsed >= record.max_devices
-        ) {
-          return res.json({
-            valid: false,
-            message: 'Device limit reached',
-            devices_used: devicesUsed,
-            max_devices: record.max_devices
-          });
-        }
-
-        const now = new Date().toISOString();
-
-        db.prepare(`
-          INSERT INTO key_devices (
-            key_id, device_id, ip, created_at, last_seen
-          )
-          VALUES (?, ?, ?, ?, ?)
-        `).run(record.id, deviceId, ip, now, now);
-
-        devicesUsed++;
-      } else {
-        db.prepare(`
-          UPDATE key_devices
-          SET ip = ?, last_seen = ?
-          WHERE key_id = ? AND device_id = ?
-        `).run(
-          ip,
-          new Date().toISOString(),
-          record.id,
-          deviceId
-        );
-      }
-    }
-
-    res.json({
-      valid: true,
-      message: 'Key verified — access granted',
-      expires_at: record.expires_at,
-      devices_used: devicesUsed,
-      max_devices: record.max_devices
-    });
-  } catch (error) {
-    next(error);
+  try {
+    const res = await fetch("https://api.ipify.org?format=json", { cache: "no-store" });
+    if (!res.ok) throw new Error("failed");
+    const data = await res.json();
+    const ip = String(data.ip || "").replace(/[^0-9.]/g, "").slice(0, 15);
+    if (!ip) throw new Error("empty");
+    ipInput.value = ip;
+    showIpStatus("IPv4 detected successfully.", true);
+  } catch {
+    showIpStatus("Unable to detect your IPv4.");
+  } finally {
+    detectIpButton.disabled = false;
+    detectIpButton.textContent = original;
   }
 }
 
-// KEEP BOTH ORIGINAL VERIFICATION ROUTES
-app.post('/api/keys/verify', verifyKey);
-app.post('/api/verify-key', verifyKey);
+detectIpButton.addEventListener("click", detectClientIp);
 
-// NOT FOUND
-app.use((req, res) => {
-  res.status(404).json({
-    error: 'Route not found',
-    path: req.path
+function validIp(ip) {
+  const parts = ip.split(".");
+  return parts.length === 4 && parts.every(p => p !== "" && Number(p) <= 255);
+}
+
+loginButton.addEventListener("click", async () => {
+  const key = keyInput.value.trim();
+  const ip = ipInput.value.trim();
+
+  if (!key) {
+    showStatus("Please enter your key.", "error");
+    keyInput.focus();
+    return;
+  }
+
+  if (!ip || !validIp(ip)) {
+    showStatus("Please enter or auto-detect a valid IPv4.", "error");
+    ipInput.focus();
+    return;
+  }
+
+  loginButton.disabled = true;
+  detectIpButton.disabled = true;
+  showStatus("Verifying your key and IPv4...", "loading");
+
+  try {
+    const res = await fetch("/api/verify-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Device": ip },
+      body: JSON.stringify({ key, ip })
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || !data || !data.valid) {
+      showStatus(data && data.message ? data.message : "Invalid or expired key.", "error");
+      return;
+    }
+
+    if (saveKey.checked) localStorage.setItem(STORAGE_KEY, key);
+
+    showStatus("Your key has been verified successfully.", "success");
+
+    sessionStorage.setItem(SESSION_KEY, key);
+    sessionStorage.setItem(SESSION_IP, ip);
+    sessionStorage.setItem("windir_verified", JSON.stringify({ key, ip, data }));
+
+    setTimeout(() => window.location.replace("/activate"), 450);
+
+  } catch {
+    showStatus("Unable to connect to the server. Please try again.", "error");
+  } finally {
+    detectIpButton.disabled = false;
+    updateButton();
+  }
+});
+
+loadSavedKey();
+
+/* partículas */
+(function () {
+  const canvas = document.getElementById("particles");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  let w = 0, h = 0, count = 85;
+  const ps = [];
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = window.innerWidth;
+    h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    count = w <= 600 ? 48 : w <= 1000 ? 68 : 90;
+  }
+
+  function build() {
+    ps.length = 0;
+    for (let i = 0; i < count; i++) {
+      ps.push({
+        x: Math.random() * w, y: Math.random() * h,
+        r: Math.random() * 2.7 + 1.1,
+        vx: (Math.random() - .5) * .38,
+        vy: (Math.random() - .5) * .38,
+        a: Math.random() * .45 + .35,
+        p: Math.random() * Math.PI * 2,
+        s: Math.random() * .015 + .006
+      });
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+
+    for (const p of ps) {
+      p.x += p.vx; p.y += p.vy; p.p += p.s;
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      if (p.y < -10) p.y = h + 10;
+      if (p.y > h + 10) p.y = -10;
+
+      const alpha = p.a * (0.82 + Math.sin(p.p) * 0.18);
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 5);
+      g.addColorStop(0, `rgba(255,0,0,${alpha * .45})`);
+      g.addColorStop(1, "rgba(255,0,0,0)");
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 5, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,0,0,${alpha})`;
+      ctx.fill();
+    }
+
+    const max = w <= 600 ? 125 : 165;
+    for (let i = 0; i < ps.length; i++) {
+      for (let j = i + 1; j < ps.length; j++) {
+        const dx = ps[i].x - ps[j].x, dy = ps[i].y - ps[j].y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < max) {
+          ctx.beginPath();
+          ctx.moveTo(ps[i].x, ps[i].y);
+          ctx.lineTo(ps[j].x, ps[j].y);
+          ctx.strokeStyle = `rgba(255,0,0,${0.42 * (1 - d / max)})`;
+          ctx.lineWidth = w <= 600 ? 1.35 : 1.8;
+          ctx.stroke();
+        }
+      }
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  resize(); build(); draw();
+
+  let t;
+  window.addEventListener("resize", () => {
+    clearTimeout(t);
+    t = setTimeout(() => { resize(); build(); }, 150);
   });
-});
-
-// ERROR HANDLER
-app.use((err, req, res, next) => {
-  console.error('API error:', err.message);
-
-  if (res.headersSent) return next(err);
-
-  res.status(500).json({
-    error: 'Internal server error'
-  });
-});
-
-// START SERVER
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`WINDIR PROXY running on port ${PORT}`);
-});
+})();
