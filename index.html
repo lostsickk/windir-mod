@@ -2,64 +2,120 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WINDIR MODE</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050505">
+  <title>WINDIR PROXY</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
-
 <body>
-  <div class="bg"></div>
 
-  <header>
-    <a class="brand" href="#">
-      WINDIR<span> MODE</span>
-    </a>
-    <button class="ghost" id="adminOpen">ADMIN</button>
-  </header>
+  <canvas id="particles"></canvas>
+  <div class="ambient"></div>
 
-  <main>
-    <section class="hero">
-      <div class="pill">✦ PRIVATE ACCESS SYSTEM</div>
+  <div class="page">
 
-      <h1>WINDIR<br><span>MODE</span></h1>
-
-      <p class="sub">Your access. Your rules.</p>
-
-      <div class="line"></div>
-
-      <div class="panel">
-        <div class="panel-title">
-          KEY ACTIVATION <span class="dot"></span>
+    <header class="header">
+      <a class="brand" href="/">
+        <div class="brand-icon">
+          <img class="code-icon" src="/avatar.jpg" alt="WINDIR"
+               onerror="this.style.display='none'">
         </div>
+        <div class="brand-name">WINDIR <span>PROXY</span></div>
+      </a>
 
-        <p>Enter the access key provided by the administrator.</p>
+      <button class="ghost" id="adminOpen" type="button">
+        ADMIN
+      </button>
+    </header>
 
-        <form id="verify">
-          <input
-            id="keyInput"
-            placeholder="WINDIR-XXXXXXXXXXXX"
-            autocomplete="off"
-            required
+    <main class="content">
+      <section class="login-box">
+        <div class="panel">
+
+          <div class="panel-title">
+            KEY ACTIVATION <span class="dot"></span>
+          </div>
+
+          <p>Enter your access key to continue.</p>
+
+          <div class="input-wrapper">
+            <div class="input-glow"></div>
+            <input
+              id="keyInput"
+              class="key-input"
+              type="text"
+              placeholder="WINDIR-XXXXXXXXXXXX"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck="false"
+            >
+          </div>
+
+          <div class="ip-row">
+            <input
+              id="ipInput"
+              class="ip-input"
+              type="text"
+              inputmode="decimal"
+              maxlength="15"
+              placeholder="Your IPv4 address"
+              autocomplete="off"
+            >
+
+            <button
+              id="detectIpButton"
+              class="detect-button"
+              type="button"
+            >
+              Auto-detect
+            </button>
+          </div>
+
+          <div id="ipStatus" class="ip-status"></div>
+
+          <div class="save-row">
+            <label class="save-label">
+              <input
+                id="saveKey"
+                class="save-checkbox"
+                type="checkbox"
+              >
+              <span>Remember my key</span>
+            </label>
+
+            <button id="clearKey" class="clear-key" type="button">
+              Clear saved key
+            </button>
+          </div>
+
+          <button
+            id="loginButton"
+            class="login-button"
+            type="button"
+            disabled
           >
-          <button class="primary">VERIFY KEY ↗</button>
-        </form>
+            ENTER KEY
+          </button>
 
-        <div id="result" class="result"></div>
-      </div>
+          <div id="status" class="status"></div>
 
-      <div class="foot">
-        SECURE ACCESS · WINDIR MODE
-      </div>
-    </section>
-  </main>
+          <div class="foot">
+            SECURE ACCESS · WINDIR PROXY
+          </div>
+
+        </div>
+      </section>
+    </main>
+  </div>
 
   <!-- ADMIN MODAL -->
   <div class="modal hidden" id="modal">
     <div class="modalbox">
 
-      <button class="close" id="close">×</button>
+      <button class="close" id="close" type="button">×</button>
 
-      <h2>ADMIN <span>ACCESS</span></h2>
+      <h2>WINDIR <span>ADMIN</span></h2>
 
       <!-- LOGIN -->
       <div id="loginView">
@@ -67,6 +123,7 @@
 
         <input
           id="username"
+          type="text"
           placeholder="Username"
           autocomplete="username"
         >
@@ -78,7 +135,7 @@
           autocomplete="current-password"
         >
 
-        <button class="primary" id="login">
+        <button class="primary" id="login" type="button">
           LOGIN
         </button>
 
@@ -94,47 +151,63 @@
 
         <div class="pill" id="adminRole"></div>
 
-        <!-- KEY MANAGEMENT -->
+        <!-- KEY GENERATOR -->
         <section>
           <h3>KEY MANAGEMENT</h3>
 
-          <div class="row">
-            <input
-              id="label"
-              placeholder="Label / user (optional)"
-            >
+          <input
+            id="label"
+            type="text"
+            placeholder="Label / user (optional)"
+          >
 
-            <select id="days">
-              <option value="1">1 day</option>
-              <option value="7" selected>7 days</option>
-              <option value="30">30 days</option>
-              <option value="90">90 days</option>
-              <option value="365">1 year</option>
-              <option value="3650">Permanent (10 years)</option>
-            </select>
-          </div>
+          <select id="days">
+            <option value="1">1 day</option>
+            <option value="7" selected>7 days</option>
+            <option value="30">30 days</option>
+            <option value="90">90 days</option>
+            <option value="365">1 year</option>
+            <option value="3650">10 years</option>
+          </select>
 
-          <button class="primary" id="make">
-            ＋ GENERATE KEY
+          <select id="maxDevices">
+            <option value="1">1 device</option>
+            <option value="2">2 devices</option>
+            <option value="3">3 devices</option>
+            <option value="5">5 devices</option>
+            <option value="10">10 devices</option>
+            <option value="0">Unlimited devices</option>
+          </select>
+
+          <button class="primary" id="make" type="button">
+            + GENERATE KEY
           </button>
 
           <div id="newKey"></div>
 
           <h3>RECENT KEYS</h3>
           <div id="keys"></div>
+
         </section>
 
-        <!-- OWNER ONLY -->
+        <!-- DEVICE MANAGEMENT -->
+        <section>
+          <div class="line"></div>
+          <h3>DEVICE MANAGEMENT</h3>
+          <p>View registered devices and release device slots.</p>
+          <div id="deviceList"></div>
+        </section>
+
+        <!-- OWNER CONTROLS -->
         <section id="ownerPanel" class="hidden">
 
           <div class="line"></div>
 
           <h3>OWNER CONTROL</h3>
 
-          <p>Create and manage website administrators.</p>
-
           <input
             id="newAdminUser"
+            type="text"
             placeholder="New admin username"
           >
 
@@ -145,19 +218,18 @@
             autocomplete="new-password"
           >
 
-          <button class="primary" id="createAdmin">
-            ＋ CREATE ADMIN
+          <button class="primary" id="createAdmin" type="button">
+            + CREATE ADMIN
           </button>
 
           <div id="adminMessage" class="result"></div>
 
           <h3>ADMINISTRATORS</h3>
-
           <div id="adminList"></div>
 
         </section>
 
-        <button class="ghost" id="logout">
+        <button class="ghost logout-button" id="logout" type="button">
           LOG OUT
         </button>
 
@@ -165,6 +237,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>
