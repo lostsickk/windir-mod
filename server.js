@@ -249,5 +249,9 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`WINDIR MODE running on port ${PORT}`);
+
+  console.log('BOT_TOKEN configurado:', Boolean(process.env.BOT_TOKEN));
+  console.log('ADMIN_TELEGRAM_ID configurado:', Boolean(process.env.ADMIN_TELEGRAM_ID));
+
   startTelegramBot({ db, hash });
 });
