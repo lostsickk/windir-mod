@@ -2,6 +2,7 @@ const express = require('express');
 const Database = require('better-sqlite3');
 const crypto = require('crypto');
 const path = require('path');
+const { startTelegramBot } = require('./telegram');
 
 const app = express();
 
@@ -248,4 +249,5 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`WINDIR MODE running on port ${PORT}`);
+  startTelegramBot({ db, hash });
 });
