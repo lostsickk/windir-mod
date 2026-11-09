@@ -1,260 +1,324 @@
-const STORAGE_KEY = "windir_saved_key";
-const SESSION_KEY = "windir_session_key";
-const SESSION_IP = "windir_session_ip";
+let token = localStorage.getItem('windir_admin_token');
+let currentAdmin = null;
 
-const keyInput = document.getElementById("keyInput");
-const saveKey = document.getElementById("saveKey");
-const clearKey = document.getElementById("clearKey");
-const loginButton = document.getElementById("loginButton");
-const status = document.getElementById("status");
-const ipInput = document.getElementById("ipInput");
-const detectIpButton = document.getElementById("detectIpButton");
-const ipStatus = document.getElementById("ipStatus");
+const $ = id => document.getElementById(id);
 
-function showStatus(message, type) {
-  status.textContent = message;
-  status.className = "status show " + type;
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[char]);
 }
 
-function hideStatus() {
-  status.textContent = "";
-  status.className = "status";
-}
+async function api(url, options = {}) {
+  const headers = {
+    ...(options.headers || {}),
+    ...(token ? { Authorization: 'Bearer ' + token } : {})
+  };
 
-function updateButton() {
-  loginButton.disabled = keyInput.value.trim().length === 0;
-}
-
-function showIpStatus(message, success = false) {
-  ipStatus.textContent = message;
-  ipStatus.style.color = success ? "#55e889" : "rgba(255,255,255,0.38)";
-}
-
-function loadSavedKey() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return;
-  keyInput.value = saved;
-  saveKey.checked = true;
-  clearKey.style.display = "block";
-  updateButton();
-}
-
-function removeSavedKey() {
-  localStorage.removeItem(STORAGE_KEY);
-  saveKey.checked = false;
-  clearKey.style.display = "none";
-}
-
-keyInput.addEventListener("input", () => {
-  updateButton();
-  const current = keyInput.value.trim();
-  const saved = localStorage.getItem(STORAGE_KEY);
-
-  if (saved && current !== saved) {
-    saveKey.checked = false;
-    clearKey.style.display = "none";
+  if (options.body) {
+    headers['Content-Type'] = 'application/json';
   }
 
-  if (status.classList.contains("error") || status.classList.contains("success")) {
-    hideStatus();
+  const response = await fetch(url, {
+    ...options,
+    headers
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Request failed');
   }
 
-  showIpStatus("");
-});
+  return data;
+}
 
-saveKey.addEventListener("change", () => {
-  if (saveKey.checked) {
-    const key = keyInput.value.trim();
-    if (!key) {
-      saveKey.checked = false;
-      return;
-    }
-    localStorage.setItem(STORAGE_KEY, key);
-    clearKey.style.display = "block";
-  } else {
-    removeSavedKey();
-  }
-});
+// VERIFY KEY
+$('verify').addEventListener('submit', async event => {
+  event.preventDefault();
 
-clearKey.addEventListener("click", () => {
-  removeSavedKey();
-  keyInput.value = "";
-  updateButton();
-  hideStatus();
-});
-
-ipInput.addEventListener("input", () => {
-  ipInput.value = ipInput.value.replace(/[^0-9.]/g, "").slice(0, 15);
-  showIpStatus("");
-});
-
-async function detectClientIp() {
-  detectIpButton.disabled = true;
-  const original = detectIpButton.textContent;
-  detectIpButton.textContent = "Detecting...";
-  showIpStatus("Detecting your public IPv4...");
+  $('result').textContent = 'Checking…';
 
   try {
-    const res = await fetch("https://api.ipify.org?format=json", { cache: "no-store" });
-    if (!res.ok) throw new Error("failed");
-    const data = await res.json();
-    const ip = String(data.ip || "").replace(/[^0-9.]/g, "").slice(0, 15);
-    if (!ip) throw new Error("empty");
-    ipInput.value = ip;
-    showIpStatus("IPv4 detected successfully.", true);
-  } catch {
-    showIpStatus("Unable to detect your IPv4.");
-  } finally {
-    detectIpButton.disabled = false;
-    detectIpButton.textContent = original;
-  }
-}
-
-detectIpButton.addEventListener("click", detectClientIp);
-
-function validIp(ip) {
-  const parts = ip.split(".");
-  return parts.length === 4 && parts.every(p => p !== "" && Number(p) <= 255);
-}
-
-loginButton.addEventListener("click", async () => {
-  const key = keyInput.value.trim();
-  const ip = ipInput.value.trim();
-
-  if (!key) {
-    showStatus("Please enter your key.", "error");
-    keyInput.focus();
-    return;
-  }
-
-  if (!ip || !validIp(ip)) {
-    showStatus("Please enter or auto-detect a valid IPv4.", "error");
-    ipInput.focus();
-    return;
-  }
-
-  loginButton.disabled = true;
-  detectIpButton.disabled = true;
-  showStatus("Verifying your key and IPv4...", "loading");
-
-  try {
-    const res = await fetch("/api/verify-key", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Device": ip },
-      body: JSON.stringify({ key, ip })
+    const response = await fetch('/api/keys/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: $('keyInput').value
+      })
     });
 
-    const data = await res.json().catch(() => null);
+    const data = await response.json();
 
-    if (!res.ok || !data || !data.valid) {
-      showStatus(data && data.message ? data.message : "Invalid or expired key.", "error");
-      return;
-    }
+    $('result').textContent =
+      data.message +
+      (data.valid
+        ? ' · Expires ' + new Date(data.expires_at).toLocaleDateString()
+        : '');
 
-    if (saveKey.checked) localStorage.setItem(STORAGE_KEY, key);
-
-    showStatus("Your key has been verified successfully.", "success");
-
-    sessionStorage.setItem(SESSION_KEY, key);
-    sessionStorage.setItem(SESSION_IP, ip);
-    sessionStorage.setItem("windir_verified", JSON.stringify({ key, ip, data }));
-
-    setTimeout(() => window.location.replace("/activate"), 450);
+    $('result').style.color = data.valid ? '#a3e635' : '#fb7185';
 
   } catch {
-    showStatus("Unable to connect to the server. Please try again.", "error");
-  } finally {
-    detectIpButton.disabled = false;
-    updateButton();
+    $('result').textContent = 'Server unavailable';
   }
 });
 
-loadSavedKey();
+// OPEN / CLOSE ADMIN
+$('adminOpen').onclick = () => {
+  $('modal').classList.remove('hidden');
+  showAuth();
+};
 
-/* partículas */
-(function () {
-  const canvas = document.getElementById("particles");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  let w = 0, h = 0, count = 85;
-  const ps = [];
+$('close').onclick = () => {
+  $('modal').classList.add('hidden');
+};
 
-  function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    w = window.innerWidth;
-    h = window.innerHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    count = w <= 600 ? 48 : w <= 1000 ? 68 : 90;
+// LOGIN VIEW
+function showLogin() {
+  $('loginView').classList.remove('hidden');
+  $('dash').classList.add('hidden');
+}
+
+// DASHBOARD
+async function showAuth() {
+  if (!token) {
+    currentAdmin = null;
+    showLogin();
+    return;
   }
 
-  function build() {
-    ps.length = 0;
-    for (let i = 0; i < count; i++) {
-      ps.push({
-        x: Math.random() * w, y: Math.random() * h,
-        r: Math.random() * 2.7 + 1.1,
-        vx: (Math.random() - .5) * .38,
-        vy: (Math.random() - .5) * .38,
-        a: Math.random() * .45 + .35,
-        p: Math.random() * Math.PI * 2,
-        s: Math.random() * .015 + .006
-      });
+  try {
+    currentAdmin = await api('/api/admin/me');
+
+    $('loginView').classList.add('hidden');
+    $('dash').classList.remove('hidden');
+
+    $('adminName').textContent = escapeHTML(currentAdmin.username);
+    $('adminRole').textContent = currentAdmin.role.toUpperCase();
+
+    const isOwner = currentAdmin.role === 'owner';
+
+    $('ownerPanel').classList.toggle('hidden', !isOwner);
+
+    await loadKeys();
+
+    if (isOwner) {
+      await loadAdmins();
     }
+
+  } catch {
+    token = null;
+    currentAdmin = null;
+    localStorage.removeItem('windir_admin_token');
+    showLogin();
   }
+}
 
-  function draw() {
-    ctx.clearRect(0, 0, w, h);
+// LOGIN
+$('login').onclick = async () => {
+  const username = $('username').value.trim();
+  const password = $('password').value;
 
-    for (const p of ps) {
-      p.x += p.vx; p.y += p.vy; p.p += p.s;
-      if (p.x < -10) p.x = w + 10;
-      if (p.x > w + 10) p.x = -10;
-      if (p.y < -10) p.y = h + 10;
-      if (p.y > h + 10) p.y = -10;
+  $('loginErr').textContent = 'Checking…';
 
-      const alpha = p.a * (0.82 + Math.sin(p.p) * 0.18);
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 5);
-      g.addColorStop(0, `rgba(255,0,0,${alpha * .45})`);
-      g.addColorStop(1, "rgba(255,0,0,0)");
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * 5, 0, Math.PI * 2);
-      ctx.fillStyle = g;
-      ctx.fill();
+  try {
+    const response = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
 
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255,0,0,${alpha})`;
-      ctx.fill();
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Login failed');
     }
 
-    const max = w <= 600 ? 125 : 165;
-    for (let i = 0; i < ps.length; i++) {
-      for (let j = i + 1; j < ps.length; j++) {
-        const dx = ps[i].x - ps[j].x, dy = ps[i].y - ps[j].y;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        if (d < max) {
-          ctx.beginPath();
-          ctx.moveTo(ps[i].x, ps[i].y);
-          ctx.lineTo(ps[j].x, ps[j].y);
-          ctx.strokeStyle = `rgba(255,0,0,${0.42 * (1 - d / max)})`;
-          ctx.lineWidth = w <= 600 ? 1.35 : 1.8;
-          ctx.stroke();
-        }
+    token = data.token;
+    localStorage.setItem('windir_admin_token', token);
+
+    $('password').value = '';
+    $('loginErr').textContent = '';
+
+    await showAuth();
+
+  } catch (error) {
+    $('loginErr').textContent = error.message;
+  }
+};
+
+// LOAD KEYS
+async function loadKeys() {
+  const keys = await api('/api/admin/keys');
+
+  $('keys').innerHTML = keys.map(key => `
+    <div class="keyitem">
+      <b>${escapeHTML(key.label || 'Unlabeled')}</b>
+      · ${new Date(key.expires_at).toLocaleDateString()}
+      · ${key.revoked ? 'REVOKED' : 'ACTIVE'}
+
+      <button onclick="revokeKey(${Number(key.id)})">
+        REVOKE
+      </button>
+
+      <br>
+      <small>
+        Created ${new Date(key.created_at).toLocaleDateString()}
+      </small>
+    </div>
+  `).join('') || '<p class="result">No keys yet.</p>';
+}
+
+// GENERATE KEY
+$('make').onclick = async () => {
+  try {
+    const data = await api('/api/admin/keys', {
+      method: 'POST',
+      body: JSON.stringify({
+        days: $('days').value,
+        label: $('label').value
+      })
+    });
+
+    const safeKey = escapeHTML(data.key);
+
+    $('newKey').innerHTML = `
+      <div class="keybox">
+        ${safeKey}
+        <br>
+        <button class="ghost" id="copyKey">COPY KEY</button>
+      </div>
+    `;
+
+    $('copyKey').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(data.key);
+        $('copyKey').textContent = 'COPIED!';
+      } catch {
+        alert('Could not copy the key');
       }
-    }
+    };
 
-    requestAnimationFrame(draw);
+    $('label').value = '';
+    await loadKeys();
+
+  } catch (error) {
+    alert(error.message);
   }
+};
 
-  resize(); build(); draw();
+// REVOKE KEY
+window.revokeKey = async id => {
+  if (!confirm('Revoke this key?')) return;
 
-  let t;
-  window.addEventListener("resize", () => {
-    clearTimeout(t);
-    t = setTimeout(() => { resize(); build(); }, 150);
-  });
-})();
+  try {
+    await api('/api/admin/keys/' + id + '/revoke', {
+      method: 'POST'
+    });
+
+    await loadKeys();
+
+  } catch (error) {
+    alert(error.message);
+  }
+};
+
+// LOAD ADMINS - OWNER ONLY
+async function loadAdmins() {
+  if (!currentAdmin || currentAdmin.role !== 'owner') return;
+
+  try {
+    const admins = await api('/api/admin/users');
+
+    $('adminList').innerHTML = admins.map(admin => `
+      <div class="keyitem">
+        <b>${escapeHTML(admin.username)}</b>
+        · ${escapeHTML(admin.role.toUpperCase())}
+        · ${admin.disabled ? 'DISABLED' : 'ACTIVE'}
+
+        ${
+          admin.role === 'admin'
+            ? `<button onclick="deleteAdmin(${Number(admin.id)})">DELETE</button>`
+            : ''
+        }
+
+        <br>
+        <small>
+          Created ${new Date(admin.created_at).toLocaleDateString()}
+        </small>
+      </div>
+    `).join('') || '<p class="result">No administrators.</p>';
+
+  } catch (error) {
+    $('adminMessage').textContent = error.message;
+  }
+}
+
+// CREATE ADMIN - OWNER ONLY
+$('createAdmin').onclick = async () => {
+  if (!currentAdmin || currentAdmin.role !== 'owner') return;
+
+  const username = $('newAdminUser').value.trim();
+  const password = $('newAdminPassword').value;
+
+  $('adminMessage').textContent = 'Creating administrator…';
+
+  try {
+    await api('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ username, password })
+    });
+
+    $('adminMessage').textContent = 'Administrator created successfully.';
+    $('newAdminUser').value = '';
+    $('newAdminPassword').value = '';
+
+    await loadAdmins();
+
+  } catch (error) {
+    $('adminMessage').textContent = error.message;
+  }
+};
+
+// DELETE ADMIN - OWNER ONLY
+window.deleteAdmin = async id => {
+  if (!currentAdmin || currentAdmin.role !== 'owner') return;
+
+  if (!confirm('Delete this administrator?')) return;
+
+  try {
+    await api('/api/admin/users/' + id, {
+      method: 'DELETE'
+    });
+
+    $('adminMessage').textContent = 'Administrator deleted.';
+    await loadAdmins();
+
+  } catch (error) {
+    $('adminMessage').textContent = error.message;
+  }
+};
+
+// LOGOUT
+$('logout').onclick = async () => {
+  try {
+    await api('/api/admin/logout', { method: 'POST' });
+  } catch {}
+
+  token = null;
+  currentAdmin = null;
+
+  localStorage.removeItem('windir_admin_token');
+
+  $('ownerPanel').classList.add('hidden');
+  $('newKey').innerHTML = '';
+
+  showLogin();
+};
+
+// INITIALIZE
+showAuth();
