@@ -1,6 +1,7 @@
 /* =========================================
    WINDIR PROXY - APP.JS
    Customer access + Admin dashboard
+   Proxy / Main / News / Setting
 ========================================= */
 
 "use strict";
@@ -19,10 +20,19 @@ const API = {
 const STORAGE_KEY = "windir_saved_key";
 const DEVICE_KEY = "windir_device_id";
 const ADMIN_TOKEN_KEY = "windir_admin_token";
+const LANGUAGE_KEY = "windir_language";
 
 /* ---------- HELPERS ---------- */
 
 const $ = id => document.getElementById(id);
+
+function firstElement(...ids) {
+  for (const id of ids) {
+    const element = $(id);
+    if (element) return element;
+  }
+  return null;
+}
 
 function show(element, visible) {
   if (!element) return;
@@ -80,7 +90,9 @@ async function request(url, options = {}, admin = false) {
   }
 
   if (!response.ok || data.ok === false) {
-    throw new Error(data.error || data.message || `Error ${response.status}`);
+    throw new Error(
+      data.error || data.message || `Error ${response.status}`
+    );
   }
 
   return data;
@@ -100,7 +112,9 @@ function formatDate(value) {
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return String(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
 
   return date.toLocaleString();
 }
@@ -116,7 +130,43 @@ function validIPv4(ip) {
     );
 }
 
-/* ---------- CUSTOMER KEY SYSTEM ---------- */
+function maskKey(key) {
+  const value = String(key || "");
+
+  if (!value) return "Not available";
+  if (value.length <= 8) return "••••••••";
+
+  return `${value.slice(0, 4)}••••••••${value.slice(-4)}`;
+}
+
+function getExpiryTimestamp(value) {
+  if (!value) return null;
+
+  let timestamp;
+
+  if (typeof value === "number") {
+    timestamp = value;
+  } else {
+    timestamp = new Date(value).getTime();
+  }
+
+  if (!Number.isFinite(timestamp)) return null;
+
+  // Accept Unix timestamps in seconds or milliseconds.
+  if (timestamp > 0 && timestamp < 100000000000) {
+    timestamp *= 1000;
+  }
+
+  return timestamp;
+}
+
+/* ---------- CUSTOMER SESSION ---------- */
+
+let activeCustomerKey = "";
+let activeCustomerIP = "";
+let activeCustomerRemember = false;
+let activeExpiry = null;
+let countdownTimer = null;
 
 const keyInput = $("keyInput");
 const ipInput = $("ipInput");
@@ -146,6 +196,68 @@ function updateCustomerButton() {
     validIPv4(ipInput.value)
   );
 }
+
+/* ---------- LOGIN SCREEN / MENU ---------- */
+
+const loginScreen = firstElement("loginScreen") ||
+  document.querySelector(".login-box");
+
+const mainMenu = $("mainMenu");
+
+function showCustomerMenu(data = {}) {
+  show(loginScreen, false);
+  show(mainMenu, true);
+
+  if (keyInput?.value.trim()) {
+    activeCustomerKey = keyInput.value.trim();
+  }
+
+  if (ipInput?.value.trim()) {
+    activeCustomerIP = ipInput.value.trim();
+  }
+
+  activeCustomerRemember = Boolean(rememberCheckbox?.checked);
+
+  if (data.expires_at || data.expiresAt) {
+    setCustomerExpiry(data.expires_at || data.expiresAt);
+  } else {
+    setCustomerExpiry(null);
+  }
+
+  setText(
+    $("settingKey"),
+    maskKey(activeCustomerKey)
+  );
+
+  if ($("settingIpInput") && activeCustomerIP) {
+    $("settingIpInput").value = activeCustomerIP;
+  }
+
+  setText($("settingIpStatus"), "Verified");
+
+  activateMenuTab("proxy");
+}
+
+function showCustomerLogin() {
+  show(mainMenu, false);
+  show(loginScreen, true);
+
+  activeCustomerKey = "";
+  activeCustomerIP = "";
+  activeCustomerRemember = false;
+  activeExpiry = null;
+
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+
+  setText($("settingKey"), "Not available");
+  setText($("settingCountdown"), "Not available");
+  setText($("settingExpiryDate"), "Unknown");
+}
+
+/* ---------- LOGIN INPUTS ---------- */
 
 if (keyInput) {
   keyInput.addEventListener("input", () => {
@@ -177,40 +289,56 @@ if (keyInput && rememberCheckbox) {
   }
 }
 
-/* Auto-detect IP */
+/* ---------- PUBLIC IP DETECTION ---------- */
+
+async function detectPublicIP() {
+  const response = await fetch(
+    "https://api.ipify.org?format=json",
+    { cache: "no-store" }
+  );
+
+  if (!response.ok) {
+    throw new Error("IP detection failed.");
+  }
+
+  const data = await response.json();
+
+  if (!validIPv4(data.ip)) {
+    throw new Error("Invalid IP address.");
+  }
+
+  return data.ip;
+}
+
+/* Login screen IP detection */
 
 const detectIpButton = $("detectIpButton");
 
 if (detectIpButton) {
   detectIpButton.addEventListener("click", async () => {
     setText(ipStatus, "Detecting IP...");
-
     detectIpButton.disabled = true;
 
     try {
-      const response = await fetch("https://api.ipify.org?format=json");
-      if (!response.ok) throw new Error("IP detection failed");
+      const ip = await detectPublicIP();
 
-      const data = await response.json();
-
-      if (!validIPv4(data.ip)) {
-        throw new Error("Invalid IP address");
-      }
-
-      if (ipInput) ipInput.value = data.ip;
+      if (ipInput) ipInput.value = ip;
 
       setText(ipStatus, "IP detected successfully.");
       updateCustomerButton();
 
-    } catch (error) {
-      setText(ipStatus, "Could not detect IP. Enter it manually.");
+    } catch {
+      setText(
+        ipStatus,
+        "Could not detect IP. Enter it manually."
+      );
     } finally {
       detectIpButton.disabled = false;
     }
   });
 }
 
-/* Clear saved key */
+/* ---------- CLEAR SAVED KEY ---------- */
 
 const clearKeyButton = $("clearKey");
 
@@ -226,7 +354,7 @@ if (clearKeyButton) {
   });
 }
 
-/* Verify key */
+/* ---------- VERIFY CUSTOMER KEY ---------- */
 
 if (loginButton) {
   loginButton.addEventListener("click", async () => {
@@ -260,25 +388,37 @@ if (loginButton) {
         })
       });
 
+      if (data.valid === false) {
+        throw new Error(
+          data.message || "This key is not valid."
+        );
+      }
+
       if (rememberCheckbox?.checked) {
         localStorage.setItem(STORAGE_KEY, key);
       } else {
         localStorage.removeItem(STORAGE_KEY);
       }
 
+      activeCustomerKey = key;
+      activeCustomerIP = ip;
+      activeCustomerRemember = Boolean(rememberCheckbox?.checked);
+
       customerMessage(
         data.message || "Access verified successfully!",
         "success"
       );
 
-      if (data.redirectTo) {
-        setTimeout(() => {
-          window.location.href = data.redirectTo;
-        }, 700);
-      }
+      // Open the menu only after successful server verification.
+      setTimeout(() => {
+        showCustomerMenu(data);
+      }, 450);
 
     } catch (error) {
-      customerMessage(error.message || "Verification failed.", "error");
+      customerMessage(
+        error.message || "Verification failed.",
+        "error"
+      );
     } finally {
       updateCustomerButton();
     }
@@ -287,10 +427,438 @@ if (loginButton) {
 
 updateCustomerButton();
 
+/* ---------- MENU NAVIGATION ---------- */
+
+function activateMenuTab(tabName) {
+  if (!mainMenu) return;
+
+  const allowedTabs = [
+    "proxy",
+    "main",
+    "news",
+    "setting"
+  ];
+
+  if (!allowedTabs.includes(tabName)) {
+    tabName = "proxy";
+  }
+
+  document.querySelectorAll("[data-tab]").forEach(button => {
+    const active = button.dataset.tab === tabName;
+
+    button.classList.toggle("active", active);
+    button.setAttribute(
+      "aria-selected",
+      active ? "true" : "false"
+    );
+  });
+
+  allowedTabs.forEach(name => {
+    const section = $(`tab-${name}`);
+    show(section, name === tabName);
+  });
+}
+
+document.querySelectorAll("[data-tab]").forEach(button => {
+  button.addEventListener("click", () => {
+    activateMenuTab(button.dataset.tab);
+  });
+});
+
+/* ---------- MAIN: OPTION SWITCHES ---------- */
+
+const activateOptionsButton = $("activateOptions");
+const optionsMessage = $("optionsMessage");
+
+function getSelectedOptions() {
+  const selected = [];
+
+  document.querySelectorAll(".wn-switch").forEach(element => {
+    let enabled = false;
+
+    if (
+      element instanceof HTMLInputElement &&
+      element.type === "checkbox"
+    ) {
+      enabled = element.checked;
+    } else {
+      enabled =
+        element.classList.contains("active") ||
+        element.getAttribute("aria-checked") === "true" ||
+        element.getAttribute("aria-pressed") === "true";
+    }
+
+    if (enabled) {
+      const card = element.closest(
+        "[data-option], .option-card, .option-item"
+      );
+
+      const name =
+        card?.dataset.option ||
+        card?.querySelector("strong, .option-name, h3")?.textContent ||
+        element.dataset.option ||
+        "Option";
+
+      selected.push(name.trim());
+    }
+  });
+
+  return selected;
+}
+
+document.querySelectorAll(".wn-switch").forEach(element => {
+  if (
+    element instanceof HTMLInputElement &&
+    element.type === "checkbox"
+  ) {
+    element.addEventListener("change", () => {
+      element.setAttribute(
+        "aria-checked",
+        element.checked ? "true" : "false"
+      );
+
+      if (optionsMessage) {
+        optionsMessage.textContent = "";
+        optionsMessage.className = "";
+      }
+    });
+  } else {
+    element.addEventListener("click", () => {
+      const enabled =
+        element.getAttribute("aria-checked") === "true" ||
+        element.getAttribute("aria-pressed") === "true" ||
+        element.classList.contains("active");
+
+      const next = !enabled;
+
+      element.classList.toggle("active", next);
+      element.setAttribute(
+        "aria-checked",
+        next ? "true" : "false"
+      );
+      element.setAttribute(
+        "aria-pressed",
+        next ? "true" : "false"
+      );
+
+      if (optionsMessage) {
+        optionsMessage.textContent = "";
+        optionsMessage.className = "";
+      }
+    });
+  }
+});
+
+if (activateOptionsButton) {
+  activateOptionsButton.addEventListener("click", () => {
+    const selected = getSelectedOptions();
+
+    // These are panel selections only; no external app is modified.
+    sessionStorage.setItem(
+      "windir_selected_options",
+      JSON.stringify(selected)
+    );
+
+    if (optionsMessage) {
+      optionsMessage.textContent =
+        "Options activated successfully.";
+
+      optionsMessage.className =
+        "success options-success";
+    }
+  });
+}
+
+/* ---------- PROXY CERTIFICATE BUTTON ---------- */
+
+// Certificate is intentionally not downloadable yet.
+const certificateButton = $("downloadCertificate");
+
+if (certificateButton) {
+  certificateButton.disabled = true;
+  certificateButton.setAttribute("aria-disabled", "true");
+  certificateButton.title = "Certificate will be available later.";
+}
+
+/* ---------- SETTING: KEY INFORMATION ---------- */
+
+function updateSettingKey() {
+  setText(
+    $("settingKey"),
+    maskKey(activeCustomerKey)
+  );
+}
+
+/* ---------- SETTING: IP DETECTION ---------- */
+
+const settingDetectIpButton = $("settingDetectIp");
+
+if (settingDetectIpButton) {
+  settingDetectIpButton.addEventListener("click", async () => {
+    settingDetectIpButton.disabled = true;
+
+    setText(
+      $("settingIpMessage"),
+      "Detecting your IPv4 address..."
+    );
+
+    try {
+      const ip = await detectPublicIP();
+
+      const settingInput = $("settingIpInput");
+
+      if (settingInput) {
+        settingInput.value = ip;
+      }
+
+      setText(
+        $("settingIpMessage"),
+        "IP detected successfully."
+      );
+
+    } catch {
+      setText(
+        $("settingIpMessage"),
+        "Could not detect IP. Enter it manually."
+      );
+    } finally {
+      settingDetectIpButton.disabled = false;
+    }
+  });
+}
+
+/* ---------- SETTING: VERIFY AND UPDATE IP ---------- */
+
+const settingUpdateIpButton = $("settingUpdateIp");
+
+if (settingUpdateIpButton) {
+  settingUpdateIpButton.addEventListener("click", async () => {
+    const newIP = $("settingIpInput")?.value.trim();
+
+    if (!activeCustomerKey) {
+      setText(
+        $("settingIpMessage"),
+        "Your verified session is not available. Log in again."
+      );
+      return;
+    }
+
+    if (!validIPv4(newIP)) {
+      setText(
+        $("settingIpMessage"),
+        "Enter a valid IPv4 address."
+      );
+      return;
+    }
+
+    settingUpdateIpButton.disabled = true;
+
+    setText(
+      $("settingIpMessage"),
+      "Verifying your new IPv4 address..."
+    );
+
+    try {
+      const data = await request(API.verify, {
+        method: "POST",
+        headers: {
+          "X-Device": newIP
+        },
+        body: JSON.stringify({
+          key: activeCustomerKey,
+          ip: newIP,
+          deviceId: getDeviceId(),
+          remember: activeCustomerRemember
+        })
+      });
+
+      if (data.valid === false) {
+        throw new Error(
+          data.message || "IPv4 verification failed."
+        );
+      }
+
+      activeCustomerIP = newIP;
+
+      setText(
+        $("settingIpStatus"),
+        "Verified"
+      );
+
+      setText(
+        $("settingIpMessage"),
+        "IPv4 verified successfully."
+      );
+
+      if (data.expires_at || data.expiresAt) {
+        setCustomerExpiry(
+          data.expires_at || data.expiresAt
+        );
+      }
+
+    } catch (error) {
+      setText(
+        $("settingIpMessage"),
+        error.message || "Could not update IPv4."
+      );
+    } finally {
+      settingUpdateIpButton.disabled = false;
+    }
+  });
+}
+
+/* ---------- SETTING: KEY EXPIRATION COUNTDOWN ---------- */
+
+function setCustomerExpiry(value) {
+  activeExpiry = getExpiryTimestamp(value);
+
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+
+  const countdown = $("settingCountdown");
+  const expiryDate = $("settingExpiryDate");
+
+  if (!activeExpiry) {
+    setText(countdown, "Expiration unavailable");
+    setText(expiryDate, "Unknown");
+    return;
+  }
+
+  setText(
+    expiryDate,
+    new Date(activeExpiry).toLocaleString()
+  );
+
+  function updateCountdown() {
+    const remaining = activeExpiry - Date.now();
+
+    if (remaining <= 0) {
+      setText(countdown, "Expired");
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      return;
+    }
+
+    const totalSeconds = Math.floor(remaining / 1000);
+
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    setText(
+      countdown,
+      `${days}d ${hours}h ${minutes}m ${seconds}s`
+    );
+  }
+
+  updateCountdown();
+  countdownTimer = setInterval(updateCountdown, 1000);
+}
+
+/* ---------- SETTING: LANGUAGE ---------- */
+
+const languageSelect = $("settingLanguage");
+
+const translations = {
+  en: {
+    "Options activated successfully.": "Options activated successfully.",
+    "Proxy Info": "Proxy Info",
+    "Activate Options": "Activate Options",
+    "Proxy News": "Proxy News",
+    "Your Key": "Your Key",
+    "Connection": "Connection",
+    "Key Expiration": "Key Expiration",
+    "Language": "Language",
+    "Session": "Session",
+    "Log Out": "Log Out"
+  },
+
+  es: {
+    "Options activated successfully.": "Opciones activadas correctamente.",
+    "Proxy Info": "Información del Proxy",
+    "Activate Options": "Activar opciones",
+    "Proxy News": "Noticias del Proxy",
+    "Your Key": "Tu KEY",
+    "Connection": "Conexión",
+    "Key Expiration": "Expiración de la KEY",
+    "Language": "Idioma",
+    "Session": "Sesión",
+    "Log Out": "Cerrar sesión"
+  }
+};
+
+function applyLanguage(language) {
+  const selected =
+    language === "es" ? "es" : "en";
+
+  localStorage.setItem(LANGUAGE_KEY, selected);
+  document.documentElement.lang = selected;
+
+  // Elements marked with data-i18n can be translated directly.
+  document.querySelectorAll("[data-i18n]").forEach(element => {
+    const original = element.dataset.i18n;
+    const translated = translations[selected][original];
+
+    if (translated) {
+      element.textContent = translated;
+    }
+  });
+
+  // Update the language selector when it exists.
+  if (languageSelect) {
+    languageSelect.value = selected;
+  }
+}
+
+if (languageSelect) {
+  languageSelect.addEventListener("change", () => {
+    applyLanguage(languageSelect.value);
+  });
+}
+
+applyLanguage(localStorage.getItem(LANGUAGE_KEY) || "en");
+
+/* ---------- CUSTOMER LOGOUT ---------- */
+
+const customerLogoutButton = $("customerLogout");
+
+if (customerLogoutButton) {
+  customerLogoutButton.addEventListener("click", () => {
+    const confirmed = confirm(
+      "Log out and remove your locally saved key and device data?"
+    );
+
+    if (!confirmed) return;
+
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(DEVICE_KEY);
+
+    sessionStorage.removeItem("windir_selected_options");
+
+    if (keyInput) keyInput.value = "";
+    if (ipInput) ipInput.value = "";
+
+    if (rememberCheckbox) {
+      rememberCheckbox.checked = false;
+    }
+
+    setText(ipStatus, "");
+    setText($("settingIpMessage"), "");
+    setText($("settingIpStatus"), "Not verified");
+
+    customerMessage("");
+    showCustomerLogin();
+    updateCustomerButton();
+  });
+}
+
 /* ---------- ADMIN MODAL ---------- */
 
 const modal = $("modal");
-const adminOpen = $("adminOpen");
+const adminOpen = firstElement("adminOpen", "adminButton");
 const closeModal = $("close");
 
 function openAdminModal() {
@@ -334,8 +902,15 @@ function showDashboard(user) {
   show(loginView, false);
   show(dashboard, true);
 
-  setText($("adminName"), user.username || user.name || "Admin");
-  setText($("adminRole"), user.role || "ADMIN");
+  setText(
+    $("adminName"),
+    user.username || user.name || "Admin"
+  );
+
+  setText(
+    $("adminRole"),
+    user.role || "ADMIN"
+  );
 
   show(
     $("ownerPanel"),
@@ -374,10 +949,15 @@ if (adminLoginButton) {
       });
 
       if (!data.token) {
-        throw new Error("Server did not return a login token.");
+        throw new Error(
+          "Server did not return a login token."
+        );
       }
 
-      sessionStorage.setItem(ADMIN_TOKEN_KEY, data.token);
+      sessionStorage.setItem(
+        ADMIN_TOKEN_KEY,
+        data.token
+      );
 
       const user = data.user || {
         username,
@@ -388,7 +968,9 @@ if (adminLoginButton) {
       showDashboard(user);
 
     } catch (error) {
-      adminError(error.message || "Login failed.");
+      adminError(
+        error.message || "Login failed."
+      );
     } finally {
       adminLoginButton.disabled = false;
     }
@@ -445,7 +1027,9 @@ async function loadKeys() {
 
   try {
     const data = await request(API.keys, {}, true);
-    const keys = Array.isArray(data) ? data : (data.keys || []);
+    const keys = Array.isArray(data)
+      ? data
+      : (data.keys || []);
 
     container.replaceChildren();
 
@@ -477,7 +1061,9 @@ async function loadKeys() {
         `Expires: ${formatDate(key.expires_at || key.expiresAt)}`
       );
 
-      const limit = Number(key.max_devices ?? key.maxDevices ?? 1);
+      const limit = Number(
+        key.max_devices ?? key.maxDevices ?? 1
+      );
 
       const devices = createElement(
         "p",
@@ -500,6 +1086,7 @@ async function loadKeys() {
       );
 
       viewButton.type = "button";
+
       viewButton.addEventListener("click", () => {
         loadDevices(key.id);
       });
@@ -519,10 +1106,14 @@ async function loadKeys() {
           if (!confirm("Revoke this key?")) return;
 
           try {
-            await request(`${API.keys}/${encodeURIComponent(key.id)}/revoke`, {
-              method: "POST",
-              body: JSON.stringify({})
-            }, true);
+            await request(
+              `${API.keys}/${encodeURIComponent(key.id)}/revoke`,
+              {
+                method: "POST",
+                body: JSON.stringify({})
+              },
+              true
+            );
 
             await loadKeys();
 
@@ -534,7 +1125,15 @@ async function loadKeys() {
         buttons.append(revokeButton);
       }
 
-      item.append(title, details, expiry, devices, status, buttons);
+      item.append(
+        title,
+        details,
+        expiry,
+        devices,
+        status,
+        buttons
+      );
+
       container.append(item);
     });
 
@@ -551,7 +1150,9 @@ if (makeKeyButton) {
   makeKeyButton.addEventListener("click", async () => {
     const label = $("label")?.value.trim() || "";
     const days = Number($("days")?.value || 7);
-    const maxDevices = Number($("maxDevices")?.value || 1);
+    const maxDevices = Number(
+      $("maxDevices")?.value || 1
+    );
 
     makeKeyButton.disabled = true;
     setText($("newKey"), "Generating key...");
@@ -569,28 +1170,44 @@ if (makeKeyButton) {
       const generated = data.key || data.accessKey;
 
       if (!generated) {
-        throw new Error("The server did not return the generated key.");
+        throw new Error(
+          "The server did not return the generated key."
+        );
       }
 
       const output = $("newKey");
       output.replaceChildren();
 
-      const keyText = createElement("strong", "", generated);
-      const copyButton = createElement("button", "ghost", "COPY KEY");
+      const keyText = createElement(
+        "strong",
+        "",
+        generated
+      );
+
+      const copyButton = createElement(
+        "button",
+        "ghost",
+        "COPY KEY"
+      );
 
       copyButton.type = "button";
+
       copyButton.addEventListener("click", async () => {
         try {
           await navigator.clipboard.writeText(generated);
           copyButton.textContent = "COPIED!";
         } catch {
-          alert("Could not copy automatically. Select and copy the key.");
+          alert(
+            "Could not copy automatically. Select and copy the key."
+          );
         }
       });
 
       output.append(keyText, copyButton);
 
-      if ($("label")) $("label").value = "";
+      if ($("label")) {
+        $("label").value = "";
+      }
 
       await loadKeys();
 
@@ -636,9 +1253,21 @@ async function loadDevices(keyId) {
       const item = createElement("div", "device-item");
 
       item.append(
-        createElement("strong", "", `Device: ${device.device_id || device.deviceId || "Unknown"}`),
-        createElement("p", "", `IP: ${device.ip || "Unknown"}`),
-        createElement("p", "", `Last seen: ${formatDate(device.last_seen || device.lastSeen)}`)
+        createElement(
+          "strong",
+          "",
+          `Device: ${device.device_id || device.deviceId || "Unknown"}`
+        ),
+        createElement(
+          "p",
+          "",
+          `IP: ${device.ip || "Unknown"}`
+        ),
+        createElement(
+          "p",
+          "",
+          `Last seen: ${formatDate(device.last_seen || device.lastSeen)}`
+        )
       );
 
       if (!device.revoked) {
@@ -651,9 +1280,12 @@ async function loadDevices(keyId) {
         revoke.type = "button";
 
         revoke.addEventListener("click", async () => {
-          if (!confirm("Remove this device from the key?")) return;
+          if (!confirm("Remove this device from the key?")) {
+            return;
+          }
 
-          const deviceId = device.device_id || device.deviceId;
+          const deviceId =
+            device.device_id || device.deviceId;
 
           try {
             await request(
@@ -671,6 +1303,7 @@ async function loadDevices(keyId) {
         });
 
         item.append(revoke);
+
       } else {
         item.append(
           createElement("p", "", "DEVICE REVOKED")
@@ -701,6 +1334,7 @@ async function loadAdmins() {
 
   try {
     const data = await request(API.admins, {}, true);
+
     const admins = Array.isArray(data)
       ? data
       : (data.users || data.admins || []);
@@ -718,8 +1352,16 @@ async function loadAdmins() {
       const item = createElement("div", "admin-item");
 
       item.append(
-        createElement("strong", "", admin.username || "Unknown"),
-        createElement("p", "", `Role: ${admin.role || "ADMIN"}`)
+        createElement(
+          "strong",
+          "",
+          admin.username || "Unknown"
+        ),
+        createElement(
+          "p",
+          "",
+          `Role: ${admin.role || "ADMIN"}`
+        )
       );
 
       if (String(admin.role).toUpperCase() !== "OWNER") {
@@ -732,7 +1374,9 @@ async function loadAdmins() {
         removeButton.type = "button";
 
         removeButton.addEventListener("click", async () => {
-          if (!confirm(`Delete admin ${admin.username}?`)) return;
+          if (!confirm(`Delete admin ${admin.username}?`)) {
+            return;
+          }
 
           try {
             await request(
@@ -769,17 +1413,27 @@ if (createAdminButton) {
     const password = $("newAdminPassword")?.value;
 
     if (!username || !password) {
-      setText($("adminMessage"), "Enter username and password.");
+      setText(
+        $("adminMessage"),
+        "Enter username and password."
+      );
       return;
     }
 
     if (password.length < 12) {
-      setText($("adminMessage"), "Password must have at least 12 characters.");
+      setText(
+        $("adminMessage"),
+        "Password must have at least 12 characters."
+      );
       return;
     }
 
     createAdminButton.disabled = true;
-    setText($("adminMessage"), "Creating administrator...");
+
+    setText(
+      $("adminMessage"),
+      "Creating administrator..."
+    );
 
     try {
       await request(API.admins, {
@@ -787,7 +1441,10 @@ if (createAdminButton) {
         body: JSON.stringify({ username, password })
       }, true);
 
-      setText($("adminMessage"), "Administrator created successfully.");
+      setText(
+        $("adminMessage"),
+        "Administrator created successfully."
+      );
 
       $("newAdminUser").value = "";
       $("newAdminPassword").value = "";
@@ -795,7 +1452,10 @@ if (createAdminButton) {
       await loadAdmins();
 
     } catch (error) {
-      setText($("adminMessage"), error.message);
+      setText(
+        $("adminMessage"),
+        error.message
+      );
     } finally {
       createAdminButton.disabled = false;
     }
@@ -818,6 +1478,7 @@ if (logoutButton) {
     }
 
     sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+
     showLogin();
 
     if ($("username")) $("username").value = "";
@@ -840,9 +1501,13 @@ if (logoutButton) {
   let width = 0;
   let height = 0;
   let particles = [];
+  let animationFrame = null;
 
   function resize() {
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = Math.min(
+      window.devicePixelRatio || 1,
+      2
+    );
 
     width = window.innerWidth;
     height = window.innerHeight;
@@ -857,16 +1522,22 @@ if (logoutButton) {
 
     const count = Math.min(
       85,
-      Math.max(25, Math.floor(width * height / 14000))
+      Math.max(
+        25,
+        Math.floor(width * height / 14000)
+      )
     );
 
-    particles = Array.from({ length: count }, () => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      size: Math.random() * 2 + 0.5,
-      speed: Math.random() * 0.35 + 0.08,
-      opacity: Math.random() * 0.5 + 0.15
-    }));
+    particles = Array.from(
+      { length: count },
+      () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        size: Math.random() * 2 + 0.5,
+        speed: Math.random() * 0.35 + 0.08,
+        opacity: Math.random() * 0.5 + 0.15
+      })
+    );
   }
 
   function animate() {
@@ -881,6 +1552,7 @@ if (logoutButton) {
       }
 
       ctx.beginPath();
+
       ctx.arc(
         particle.x,
         particle.y,
@@ -889,15 +1561,29 @@ if (logoutButton) {
         Math.PI * 2
       );
 
-      ctx.fillStyle = `rgba(255, 35, 45, ${particle.opacity})`;
+      ctx.fillStyle =
+        `rgba(255, 35, 45, ${particle.opacity})`;
+
       ctx.fill();
     }
 
-    requestAnimationFrame(animate);
+    animationFrame = requestAnimationFrame(animate);
   }
 
   window.addEventListener("resize", resize);
 
   resize();
   animate();
+
+  // Pause animation when the page is not visible.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      }
+    } else if (!animationFrame) {
+      animate();
+    }
+  });
 })();
