@@ -1,239 +1,460 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#050505">
+  <meta name="theme-color" content="#080808">
+  <meta name="description" content="WINDIR PROXY Premium Panel">
   <title>WINDIR PROXY</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
 
+<body>
   <canvas id="particles"></canvas>
   <div class="ambient"></div>
 
-  <div class="page">
+  <main class="page">
 
+    <!-- HEADER -->
     <header class="header">
-      <a class="brand" href="/">
-        <div class="brand-icon">
-          <img class="code-icon" src="/avatar.jpg" alt="WINDIR"
-               onerror="this.style.display='none'">
+      <div class="brand">
+        <div class="brand-logo">W</div>
+        <div class="brand-info">
+          <strong>WINDIR PROXY</strong>
+          <small>PREMIUM ACCESS</small>
         </div>
-        <div class="brand-name">WINDIR <span>PROXY</span></div>
-      </a>
+      </div>
 
-      <button class="ghost" id="adminOpen" type="button">
+      <button id="adminButton" class="admin-button">
         ADMIN
       </button>
     </header>
 
-    <main class="content">
-      <section class="login-box">
-        <div class="panel">
-
-          <div class="panel-title">
-            KEY ACTIVATION <span class="dot"></span>
-          </div>
-
+    <!-- KEY LOGIN -->
+    <section id="loginScreen" class="login-box">
+      <div class="panel">
+        <div class="panel-heading">
+          <span class="eyebrow">SECURE ACCESS</span>
+          <h1>Welcome Back</h1>
           <p>Enter your access key to continue.</p>
+        </div>
 
-          <div class="input-wrapper">
-            <div class="input-glow"></div>
-            <input
-              id="keyInput"
-              class="key-input"
-              type="text"
-              placeholder="WINDIR-XXXXXXXXXXXX"
-              autocomplete="off"
-              autocapitalize="off"
-              autocorrect="off"
-              spellcheck="false"
-            >
+        <label for="keyInput">ACCESS KEY</label>
+        <input
+          id="keyInput"
+          type="text"
+          placeholder="Enter your key"
+          autocomplete="off"
+        >
+
+        <label for="ipInput">IPV4 ADDRESS</label>
+        <div class="input-group">
+          <input
+            id="ipInput"
+            type="text"
+            placeholder="Detecting IP..."
+            autocomplete="off"
+          >
+          <button id="detectIpButton" type="button">AUTO</button>
+        </div>
+
+        <div id="ipStatus" class="input-status"></div>
+
+        <div class="remember-row">
+          <label class="remember-label">
+            <input id="saveKey" type="checkbox">
+            <span>Remember key</span>
+          </label>
+          <button id="clearKey" type="button">Clear</button>
+        </div>
+
+        <button id="loginButton" class="primary-button">
+          ENTER KEY
+          <span>→</span>
+        </button>
+
+        <div id="status" class="status-message"></div>
+
+        <div class="login-footer">
+          <span>WINDIR PROXY</span>
+          <span>SECURE SYSTEM</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- INTERNAL MENU -->
+    <section id="mainMenu" class="wn-menu" hidden>
+
+      <header class="wn-menu-header">
+        <div class="wn-brand">
+          <div class="wn-brand-icon">W</div>
+          <div>
+            <strong>WINDIR PROXY</strong>
+            <small>PREMIUM PANEL</small>
+          </div>
+        </div>
+        <span class="wn-online"><i></i> ONLINE</span>
+      </header>
+
+      <!-- MENU TABS -->
+      <nav class="wn-tabs">
+        <button class="wn-tab active" data-tab="proxy">
+          ◈ Proxy
+        </button>
+        <button class="wn-tab" data-tab="main">
+          ⌘ Main
+        </button>
+        <button class="wn-tab" data-tab="news">
+          ◉ News
+        </button>
+        <button class="wn-tab" data-tab="setting">
+          ⚙ Setting
+        </button>
+      </nav>
+
+      <div class="wn-content">
+
+        <!-- PROXY -->
+        <section class="wn-page active" id="tab-proxy">
+          <div class="wn-heading">
+            <span class="wn-eyebrow">CONNECTION</span>
+            <h2>Proxy Info</h2>
+            <p>Connection information and verified status for your WINDIR proxy.</p>
           </div>
 
-          <div class="ip-row">
-            <input
-              id="ipInput"
-              class="ip-input"
-              type="text"
-              inputmode="decimal"
-              maxlength="15"
-              placeholder="Your IPv4 address"
-              autocomplete="off"
-            >
+          <div class="wn-card">
+            <div class="wn-card-top">
+              <strong>Proxy Details</strong>
+              <span class="wn-status"><i></i> Active</span>
+            </div>
 
-            <button
-              id="detectIpButton"
-              class="detect-button"
-              type="button"
-            >
-              Auto-detect
+            <div class="wn-info-row">
+              <span>STATUS</span>
+              <strong class="wn-green">Active</strong>
+            </div>
+
+            <div class="wn-info-row">
+              <span>PROXY IP</span>
+              <strong>165.73.244.14</strong>
+            </div>
+
+            <div class="wn-info-row">
+              <span>PORT</span>
+              <strong>1102</strong>
+            </div>
+
+            <div class="wn-info-row">
+              <span>PROXY AUTH</span>
+              <strong>WINDIR : WINDIR</strong>
+            </div>
+
+            <div class="wn-info-row">
+              <span>CERTIFICATE</span>
+              <strong>Proxy . pem</strong>
+            </div>
+
+            <button class="wn-button wn-button-disabled" disabled>
+              ↓ Download Certificate
+              <small>COMING SOON</small>
             </button>
           </div>
 
-          <div id="ipStatus" class="ip-status"></div>
+          <div class="wn-card wn-help-card">
+            <h3>Where do I put the IP and port?</h3>
+            <p>Enter the proxy IP address and port in your proxy application or device network settings.</p>
+            <p class="wn-muted">
+              Supported examples include Potatso, Wi-Fi Proxy settings, and Shadowrocket.
+            </p>
+          </div>
+        </section>
 
-          <div class="save-row">
-            <label class="save-label">
-              <input
-                id="saveKey"
-                class="save-checkbox"
-                type="checkbox"
-              >
-              <span>Remember my key</span>
+        <!-- MAIN -->
+        <section class="wn-page" id="tab-main">
+          <div class="wn-heading">
+            <span class="wn-eyebrow">CUSTOMIZATION</span>
+            <h2>Activate Options</h2>
+            <p>Select the options you want to activate for your key.</p>
+          </div>
+
+          <div class="wn-options">
+
+            <label class="wn-option">
+              <span>
+                <strong>A Aimbody</strong>
+                <small>Enable Aimbody</small>
+              </span>
+              <input type="checkbox" class="wn-switch" value="Aimbody">
             </label>
 
-            <button id="clearKey" class="clear-key" type="button">
-              Clear saved key
+            <label class="wn-option">
+              <span>
+                <strong>AimChest</strong>
+                <small>Enable AimChest</small>
+              </span>
+              <input type="checkbox" class="wn-switch" value="AimChest">
+            </label>
+
+            <label class="wn-option">
+              <span>
+                <strong>AntenaHand</strong>
+                <small>Enable AntenaHand</small>
+              </span>
+              <input type="checkbox" class="wn-switch" value="AntenaHand">
+            </label>
+
+            <label class="wn-option">
+              <span>
+                <strong>FastSwitch</strong>
+                <small>Enable FastSwitch</small>
+              </span>
+              <input type="checkbox" class="wn-switch" value="FastSwitch">
+            </label>
+
+            <label class="wn-option">
+              <span>
+                <strong>Backjump</strong>
+                <small>Enable Backjump</small>
+              </span>
+              <input type="checkbox" class="wn-switch" value="Backjump">
+            </label>
+
+            <label class="wn-option">
+              <span>
+                <strong>High Jump</strong>
+                <small>Enable High Jump</small>
+              </span>
+              <input type="checkbox" class="wn-switch" value="High Jump">
+            </label>
+
+            <label class="wn-option">
+              <span>
+                <strong>Holo Weapons</strong>
+                <small>Enable Hologram Weapons</small>
+              </span>
+              <input type="checkbox" class="wn-switch" value="Holo Weapons">
+            </label>
+
+            <label class="wn-option">
+              <span>
+                <strong>Speed</strong>
+                <small>Enable Speed</small>
+              </span>
+              <input type="checkbox" class="wn-switch" value="Speed">
+            </label>
+
+            <label class="wn-option">
+              <span>
+                <strong>FastFire</strong>
+                <small>Enable FastFire</small>
+              </span>
+              <input type="checkbox" class="wn-switch" value="FastFire">
+            </label>
+
+          </div>
+
+          <button id="activateOptions" class="wn-button">
+            ACTIVATE SELECTED OPTIONS →
+          </button>
+
+          <div id="optionsMessage" class="wn-success" hidden>
+            ✓ Options activated successfully.
+          </div>
+        </section>
+
+        <!-- NEWS -->
+        <section class="wn-page" id="tab-news">
+          <div class="wn-heading">
+            <span class="wn-eyebrow">ANNOUNCEMENTS</span>
+            <h2>Proxy News</h2>
+            <p>Latest WINDIR PROXY updates, changes and announcements.</p>
+          </div>
+
+          <article class="wn-news-card">
+            <div class="wn-news-top">
+              <span class="wn-update">UPDATE</span>
+              <time>2026-08-11 17:46</time>
+            </div>
+            <h3>Important</h3>
+            <p>
+              When you activate an option with the danger icon, you need to follow the method to play safely.
+            </p>
+          </article>
+
+          <article class="wn-news-card">
+            <div class="wn-news-top">
+              <span class="wn-update">UPDATE</span>
+              <time>2026-08-02 18:30</time>
+            </div>
+            <h3>Proxy Method Tuto</h3>
+            <p>How to use the new method.</p>
+            <a href="https://ibb.co/hRxv0P3Y" target="_blank" rel="noopener">
+              View tutorial →
+            </a>
+          </article>
+        </section>
+
+        <!-- SETTING -->
+        <section class="wn-page" id="tab-setting">
+          <div class="wn-heading">
+            <span class="wn-eyebrow">ACCOUNT CONTROL</span>
+            <h2>Settings</h2>
+            <p>Manage your key, connection and session.</p>
+          </div>
+
+          <div class="wn-card">
+            <h3>Your Key</h3>
+            <p class="wn-muted">The key currently connected to this session.</p>
+
+            <div class="wn-info-row">
+              <span>KEY</span>
+              <strong id="settingKey">Not connected</strong>
+            </div>
+          </div>
+
+          <div class="wn-card">
+            <h3>Connection</h3>
+            <p class="wn-muted">Change the IPv4 linked to your key.</p>
+
+            <div class="wn-info-row">
+              <span>STATUS</span>
+              <strong id="settingIpStatus" class="wn-green">Verified</strong>
+            </div>
+
+            <label class="wn-field-label" for="settingIpInput">
+              Enter IPv4 address
+            </label>
+
+            <input
+              id="settingIpInput"
+              class="wn-input"
+              type="text"
+              inputmode="decimal"
+              placeholder="Detecting IP address..."
+            >
+
+            <button id="settingDetectIp" class="wn-button wn-button-secondary">
+              AUTO-DETECT
+            </button>
+
+            <button id="settingUpdateIp" class="wn-button">
+              VERIFY &amp; UPDATE IPV4
+            </button>
+
+            <p id="settingIpMessage" class="wn-muted"></p>
+          </div>
+
+          <div class="wn-card">
+            <h3>Key Expiration</h3>
+            <p class="wn-muted">Remaining time for your verified key.</p>
+
+            <div id="settingCountdown" class="wn-countdown">
+              --d --h --m --s
+            </div>
+
+            <div class="wn-info-row">
+              <span>EXPIRES</span>
+              <strong id="settingExpiryDate">Checking...</strong>
+            </div>
+          </div>
+
+          <div class="wn-card">
+            <h3>Language</h3>
+            <p class="wn-muted">Choose the language used by the panel.</p>
+
+            <select id="settingLanguage" class="wn-input">
+              <option value="en">English</option>
+              <option value="es">Español</option>
+            </select>
+          </div>
+
+          <div class="wn-card wn-logout-card">
+            <h3>Session</h3>
+            <p class="wn-muted">
+              Remove the verified session and all locally saved data.
+            </p>
+
+            <button id="customerLogout" class="wn-button wn-logout-button">
+              LOG OUT
             </button>
           </div>
+        </section>
 
-          <button
-            id="loginButton"
-            class="login-button"
-            type="button"
-            disabled
-          >
-            ENTER KEY
-          </button>
+      </div>
+    </section>
 
-          <div id="status" class="status"></div>
-
-          <div class="foot">
-            SECURE ACCESS · WINDIR PROXY
-          </div>
-
-        </div>
-      </section>
-    </main>
-  </div>
+  </main>
 
   <!-- ADMIN MODAL -->
-  <div class="modal hidden" id="modal">
-    <div class="modalbox">
+  <div id="modal" class="modal" hidden>
+    <div class="modal-box">
 
-      <button class="close" id="close" type="button">×</button>
+      <button id="close" class="modal-close">×</button>
 
-      <h2>WINDIR <span>ADMIN</span></h2>
-
-      <!-- LOGIN -->
       <div id="loginView">
-        <p>Private administrator panel</p>
+        <h2>ADMIN ACCESS</h2>
 
-        <input
-          id="username"
-          type="text"
-          placeholder="Username"
-          autocomplete="username"
-        >
+        <label for="username">Username</label>
+        <input id="username" type="text" autocomplete="username">
 
-        <input
-          id="password"
-          type="password"
-          placeholder="Admin password"
-          autocomplete="current-password"
-        >
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password">
 
-        <button class="primary" id="login" type="button">
-          LOGIN
-        </button>
-
-        <div id="loginErr" class="result"></div>
+        <button id="login" class="primary-button">LOGIN</button>
+        <p id="loginErr" class="status-message"></p>
       </div>
 
-      <!-- DASHBOARD -->
-      <div id="dash" class="hidden">
+      <div id="dash" hidden>
+        <h2>ADMIN PANEL</h2>
 
-        <div class="panel-title">
-          WELCOME <span id="adminName"></span>
+        <div class="admin-profile">
+          <strong id="adminName"></strong>
+          <span id="adminRole"></span>
         </div>
 
-        <div class="pill" id="adminRole"></div>
+        <h3>Create Key</h3>
 
-        <!-- KEY GENERATOR -->
-        <section>
-          <h3>KEY MANAGEMENT</h3>
+        <label for="label">Key label</label>
+        <input id="label" type="text" placeholder="Customer">
 
-          <input
-            id="label"
-            type="text"
-            placeholder="Label / user (optional)"
-          >
+        <label for="days">Duration (days)</label>
+        <input id="days" type="number" min="1" value="30">
 
-          <select id="days">
-            <option value="1">1 day</option>
-            <option value="7" selected>7 days</option>
-            <option value="30">30 days</option>
-            <option value="90">90 days</option>
-            <option value="365">1 year</option>
-            <option value="3650">10 years</option>
-          </select>
+        <label for="maxDevices">Maximum devices</label>
+        <input id="maxDevices" type="number" min="1" value="1">
 
-          <select id="maxDevices">
-            <option value="1">1 device</option>
-            <option value="2">2 devices</option>
-            <option value="3">3 devices</option>
-            <option value="5">5 devices</option>
-            <option value="10">10 devices</option>
-            <option value="0">Unlimited devices</option>
-          </select>
+        <button id="make" class="primary-button">GENERATE KEY</button>
 
-          <button class="primary" id="make" type="button">
-            + GENERATE KEY
+        <div id="newKey"></div>
+
+        <h3>Keys</h3>
+        <div id="keys"></div>
+
+        <h3>Connected Devices</h3>
+        <div id="deviceList"></div>
+
+        <div id="ownerPanel" hidden>
+          <h3>Manage Administrators</h3>
+
+          <label for="newAdminUser">New username</label>
+          <input id="newAdminUser" type="text">
+
+          <label for="newAdminPassword">New password</label>
+          <input id="newAdminPassword" type="password">
+
+          <button id="createAdmin" class="primary-button">
+            CREATE ADMIN
           </button>
 
-          <div id="newKey"></div>
-
-          <h3>RECENT KEYS</h3>
-          <div id="keys"></div>
-
-        </section>
-
-        <!-- DEVICE MANAGEMENT -->
-        <section>
-          <div class="line"></div>
-          <h3>DEVICE MANAGEMENT</h3>
-          <p>View registered devices and release device slots.</p>
-          <div id="deviceList"></div>
-        </section>
-
-        <!-- OWNER CONTROLS -->
-        <section id="ownerPanel" class="hidden">
-
-          <div class="line"></div>
-
-          <h3>OWNER CONTROL</h3>
-
-          <input
-            id="newAdminUser"
-            type="text"
-            placeholder="New admin username"
-          >
-
-          <input
-            id="newAdminPassword"
-            type="password"
-            placeholder="New admin password (12+ characters)"
-            autocomplete="new-password"
-          >
-
-          <button class="primary" id="createAdmin" type="button">
-            + CREATE ADMIN
-          </button>
-
-          <div id="adminMessage" class="result"></div>
-
-          <h3>ADMINISTRATORS</h3>
+          <p id="adminMessage"></p>
           <div id="adminList"></div>
+        </div>
 
-        </section>
-
-        <button class="ghost logout-button" id="logout" type="button">
-          LOG OUT
+        <button id="logout" class="wn-button wn-logout-button">
+          ADMIN LOG OUT
         </button>
-
       </div>
+
     </div>
   </div>
 
