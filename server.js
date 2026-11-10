@@ -16,7 +16,9 @@ app.use(express.json({ limit: "20kb" }));
    DATABASE
 ========================================= */
 
-const dbPath = process.env.DB_PATH || path.join(__dirname, "windir.db");
+const dbPath = process.env.DB_PATH ||
+  path.join(__dirname, "windir.db");
+
 const db = new Database(dbPath);
 
 db.pragma("journal_mode = WAL");
@@ -55,11 +57,15 @@ CREATE TABLE IF NOT EXISTS key_devices (
 );
 `);
 
-/* Migration: preserve existing keys */
+/* =========================================
+   DATABASE MIGRATION
+========================================= */
 
 const keyColumns = db.pragma("table_info(keys)");
 
-if (!keyColumns.some(column => column.name === "max_devices")) {
+if (!keyColumns.some(column =>
+  column.name === "max_devices"
+)) {
   db.exec(`
     ALTER TABLE keys
     ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1
@@ -67,11 +73,45 @@ if (!keyColumns.some(column => column.name === "max_devices")) {
 }
 
 /* =========================================
+   WINDIR KEY SYSTEM
+========================================= */
+
+// ONLY ACCEPT THIS FORMAT:
+// WINDIR-XXXX-XXXX-XXXX
+
+const WINDIR_KEY_PATTERN =
+  /^WINDIR-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/;
+
+function normalizeKey(key) {
+  return String(key || "").trim().toUpperCase();
+}
+
+function validWindirKey(key) {
+  return WINDIR_KEY_PATTERN.test(normalizeKey(key));
+}
+
+function generateWindirKey() {
+  const random = crypto
+    .randomBytes(6)
+    .toString("hex")
+    .toUpperCase();
+
+  return (
+    "WINDIR-" +
+    random.slice(0, 4) + "-" +
+    random.slice(4, 8) + "-" +
+    random.slice(8, 12)
+  );
+}
+
+/* =========================================
    SECURITY
 ========================================= */
 
 const sessions = new Map();
-const SESSION_DURATION = 12 * 60 * 60 * 1000;
+
+const SESSION_DURATION =
+  12 * 60 * 60 * 1000;
 
 function makeToken() {
   return crypto.randomBytes(32).toString("hex");
@@ -97,12 +137,16 @@ function verifyPassword(password, salt, storedHash) {
       "hex"
     );
 
-    const expected = Buffer.from(storedHash, "hex");
+    const expected = Buffer.from(
+      storedHash,
+      "hex"
+    );
 
     return (
       actual.length === expected.length &&
       crypto.timingSafeEqual(actual, expected)
     );
+
   } catch {
     return false;
   }
@@ -110,7 +154,11 @@ function verifyPassword(password, salt, storedHash) {
 
 function createAdmin(username, password, role) {
   const salt = crypto.randomBytes(16).toString("hex");
-  const passwordHash = makePasswordHash(password, salt);
+
+  const passwordHash = makePasswordHash(
+    password,
+    salt
+  );
 
   return db.prepare(`
     INSERT INTO admins (
@@ -139,15 +187,26 @@ const adminCount = db.prepare(
 ).get().total;
 
 if (adminCount === 0) {
-  const ownerUser = String(process.env.ADMIN_USER || "").trim();
-  const ownerPassword = String(process.env.ADMIN_PASSWORD || "");
+  const ownerUser = String(
+    process.env.ADMIN_USER || ""
+  ).trim();
+
+  const ownerPassword = String(
+    process.env.ADMIN_PASSWORD || ""
+  );
 
   if (
     /^[a-zA-Z0-9_.-]{3,30}$/.test(ownerUser) &&
     ownerPassword.length >= 12
   ) {
-    createAdmin(ownerUser, ownerPassword, "OWNER");
+    createAdmin(
+      ownerUser,
+      ownerPassword,
+      "OWNER"
+    );
+
     console.log("Initial OWNER account created.");
+
   } else {
     console.warn(
       "No OWNER exists. Configure ADMIN_USER and ADMIN_PASSWORD in Render."
@@ -160,12 +219,16 @@ if (adminCount === 0) {
 ========================================= */
 
 function auth(req, res, next) {
-  const token = String(req.headers.authorization || "")
-    .replace(/^Bearer\s+/i, "");
+  const token = String(
+    req.headers.authorization || ""
+  ).replace(/^Bearer\s+/i, "");
 
   const session = sessions.get(token);
 
-  if (!session || session.expiresAt < Date.now()) {
+  if (
+    !session ||
+    session.expiresAt < Date.now()
+  ) {
     if (token) sessions.delete(token);
 
     return res.status(401).json({
@@ -196,7 +259,10 @@ function auth(req, res, next) {
 }
 
 function ownerOnly(req, res, next) {
-  if (!req.admin || req.admin.role !== "OWNER") {
+  if (
+    !req.admin ||
+    req.admin.role !== "OWNER"
+  ) {
     return res.status(403).json({
       ok: false,
       error: "OWNER permission required"
@@ -211,7 +277,9 @@ function ownerOnly(req, res, next) {
 ========================================= */
 
 app.use((req, res, next) => {
-  const filename = path.basename(req.path).toLowerCase();
+  const filename = path
+    .basename(req.path)
+    .toLowerCase();
 
   const blocked = [
     "server.js",
@@ -245,7 +313,9 @@ app.use(express.static(__dirname, {
 }));
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.sendFile(
+    path.join(__dirname, "index.html")
+  );
 });
 
 app.get("/activate", (req, res, next) => {
@@ -254,7 +324,9 @@ app.get("/activate", (req, res, next) => {
     path.join(__dirname, "activate", "index.html")
   ];
 
-  const page = candidates.find(file => fs.existsSync(file));
+  const page = candidates.find(file =>
+    fs.existsSync(file)
+  );
 
   if (page) return res.sendFile(page);
 
@@ -279,8 +351,13 @@ app.get("/api/health", (req, res) => {
 app.post("/api/admin/login", (req, res) => {
   const body = req.body || {};
 
-  const username = String(body.username || "").trim();
-  const password = String(body.password || "");
+  const username = String(
+    body.username || ""
+  ).trim();
+
+  const password = String(
+    body.password || ""
+  );
 
   const admin = db.prepare(`
     SELECT *
@@ -290,7 +367,11 @@ app.post("/api/admin/login", (req, res) => {
 
   if (
     !admin ||
-    !verifyPassword(password, admin.salt, admin.password_hash)
+    !verifyPassword(
+      password,
+      admin.salt,
+      admin.password_hash
+    )
   ) {
     return res.status(401).json({
       ok: false,
@@ -347,253 +428,343 @@ app.post("/api/admin/logout", auth, (req, res) => {
    CREATE ADMIN - OWNER ONLY
 ========================================= */
 
-app.post("/api/admin/users", auth, ownerOnly, (req, res) => {
-  const body = req.body || {};
+app.post(
+  "/api/admin/users",
+  auth,
+  ownerOnly,
+  (req, res) => {
+    const body = req.body || {};
 
-  const username = String(body.username || "").trim();
-  const password = String(body.password || "");
+    const username = String(
+      body.username || ""
+    ).trim();
 
-  if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) {
-    return res.status(400).json({
-      ok: false,
-      error: "Username must be 3-30 characters"
-    });
-  }
+    const password = String(
+      body.password || ""
+    );
 
-  if (password.length < 12 || password.length > 200) {
-    return res.status(400).json({
-      ok: false,
-      error: "Password must contain at least 12 characters"
-    });
-  }
-
-  try {
-    createAdmin(username, password, "ADMIN");
-
-    res.json({
-      ok: true,
-      message: "Administrator created"
-    });
-
-  } catch (error) {
-    if (String(error.code).includes("SQLITE_CONSTRAINT")) {
-      return res.status(409).json({
+    if (
+      !/^[a-zA-Z0-9_.-]{3,30}$/.test(username)
+    ) {
+      return res.status(400).json({
         ok: false,
-        error: "Username already exists"
+        error: "Username must be 3-30 characters"
       });
     }
 
-    throw error;
+    if (
+      password.length < 12 ||
+      password.length > 200
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "Password must contain at least 12 characters"
+      });
+    }
+
+    try {
+      createAdmin(username, password, "ADMIN");
+
+      res.json({
+        ok: true,
+        message: "Administrator created"
+      });
+
+    } catch (error) {
+      if (
+        String(error.code).includes(
+          "SQLITE_CONSTRAINT"
+        )
+      ) {
+        return res.status(409).json({
+          ok: false,
+          error: "Username already exists"
+        });
+      }
+
+      throw error;
+    }
   }
-});
+);
 
 /* =========================================
    LIST ADMINS - OWNER ONLY
 ========================================= */
 
-app.get("/api/admin/users", auth, ownerOnly, (req, res) => {
-  const users = db.prepare(`
-    SELECT id, username, role, created_at
-    FROM admins
-    ORDER BY id ASC
-  `).all();
+app.get(
+  "/api/admin/users",
+  auth,
+  ownerOnly,
+  (req, res) => {
+    const users = db.prepare(`
+      SELECT id, username, role, created_at
+      FROM admins
+      ORDER BY id ASC
+    `).all();
 
-  res.json(users);
-});
+    res.json(users);
+  }
+);
 
 /* =========================================
    DELETE ADMIN - OWNER ONLY
 ========================================= */
 
-app.delete("/api/admin/users/:id", auth, ownerOnly, (req, res) => {
-  const id = Number(req.params.id);
+app.delete(
+  "/api/admin/users/:id",
+  auth,
+  ownerOnly,
+  (req, res) => {
+    const id = Number(req.params.id);
 
-  if (!Number.isInteger(id) || id < 1) {
-    return res.status(400).json({
-      ok: false,
-      error: "Invalid admin id"
-    });
-  }
-
-  const target = db.prepare(`
-    SELECT id, role
-    FROM admins
-    WHERE id = ?
-  `).get(id);
-
-  if (!target) {
-    return res.status(404).json({
-      ok: false,
-      error: "Administrator not found"
-    });
-  }
-
-  if (target.role === "OWNER" || target.id === req.admin.id) {
-    return res.status(403).json({
-      ok: false,
-      error: "You cannot delete the OWNER account"
-    });
-  }
-
-  db.prepare("DELETE FROM admins WHERE id = ?").run(id);
-
-  for (const [token, session] of sessions.entries()) {
-    if (session.adminId === id) {
-      sessions.delete(token);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid admin id"
+      });
     }
-  }
 
-  res.json({ ok: true });
-});
+    const target = db.prepare(`
+      SELECT id, role
+      FROM admins
+      WHERE id = ?
+    `).get(id);
+
+    if (!target) {
+      return res.status(404).json({
+        ok: false,
+        error: "Administrator not found"
+      });
+    }
+
+    if (
+      target.role === "OWNER" ||
+      target.id === req.admin.id
+    ) {
+      return res.status(403).json({
+        ok: false,
+        error: "You cannot delete the OWNER account"
+      });
+    }
+
+    db.prepare(
+      "DELETE FROM admins WHERE id = ?"
+    ).run(id);
+
+    for (const [token, session] of sessions.entries()) {
+      if (session.adminId === id) {
+        sessions.delete(token);
+      }
+    }
+
+    res.json({ ok: true });
+  }
+);
 
 /* =========================================
-   GENERATE KEY
+   GENERATE WINDIR KEY
 ========================================= */
 
-app.post("/api/admin/keys", auth, (req, res) => {
-  const body = req.body || {};
+app.post(
+  "/api/admin/keys",
+  auth,
+  (req, res) => {
+    const body = req.body || {};
 
-  const days = Number(body.days || 7);
-  const maxDevices = Number(body.maxDevices ?? 1);
-  const label = String(body.label || "").trim().slice(0, 80);
+    const days = Number(body.days || 7);
 
-  if (!Number.isInteger(days) || days < 1 || days > 3650) {
-    return res.status(400).json({
-      ok: false,
-      error: "Days must be between 1 and 3650"
-    });
+    const maxDevices = Number(
+      body.maxDevices ?? 1
+    );
+
+    const label = String(
+      body.label || ""
+    ).trim().slice(0, 80);
+
+    if (
+      !Number.isInteger(days) ||
+      days < 1 ||
+      days > 3650
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "Days must be between 1 and 3650"
+      });
+    }
+
+    if (
+      !Number.isInteger(maxDevices) ||
+      maxDevices < 0 ||
+      maxDevices > 100
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "Devices must be 0 or between 1 and 100"
+      });
+    }
+
+    try {
+      let key;
+      let result;
+
+      // Generate a unique key.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        key = generateWindirKey();
+
+        result = db.prepare(`
+          INSERT OR IGNORE INTO keys (
+            key_hash,
+            label,
+            expires_at,
+            created_at,
+            max_devices
+          )
+          VALUES (?, ?, ?, ?, ?)
+        `).run(
+          hashKey(key),
+          label,
+          new Date(
+            Date.now() + days * 86400000
+          ).toISOString(),
+          new Date().toISOString(),
+          maxDevices
+        );
+
+        if (result.changes) break;
+
+        key = null;
+      }
+
+      if (!key || !result || !result.changes) {
+        return res.status(500).json({
+          ok: false,
+          error: "Could not generate a unique key"
+        });
+      }
+
+      const record = db.prepare(`
+        SELECT id, expires_at, max_devices
+        FROM keys
+        WHERE key_hash = ?
+      `).get(hashKey(key));
+
+      res.json({
+        ok: true,
+        key,
+        id: record.id,
+        expires_at: record.expires_at,
+        max_devices: record.max_devices
+      });
+
+    } catch (error) {
+      console.error("Key generation error:", error.message);
+
+      res.status(500).json({
+        ok: false,
+        error: "Key generation failed"
+      });
+    }
   }
-
-  if (
-    !Number.isInteger(maxDevices) ||
-    maxDevices < 0 ||
-    maxDevices > 100
-  ) {
-    return res.status(400).json({
-      ok: false,
-      error: "Devices must be 0 or between 1 and 100"
-    });
-  }
-
-  const key = "WINDIR-" +
-    crypto.randomBytes(12).toString("hex").toUpperCase();
-
-  const expires = new Date(
-    Date.now() + days * 86400000
-  ).toISOString();
-
-  const result = db.prepare(`
-    INSERT INTO keys (
-      key_hash,
-      label,
-      expires_at,
-      created_at,
-      max_devices
-    )
-    VALUES (?, ?, ?, ?, ?)
-  `).run(
-    hashKey(key),
-    label,
-    expires,
-    new Date().toISOString(),
-    maxDevices
-  );
-
-  res.json({
-    ok: true,
-    key,
-    id: result.lastInsertRowid,
-    expires_at: expires,
-    max_devices: maxDevices
-  });
-});
+);
 
 /* =========================================
    LIST KEYS
 ========================================= */
 
-app.get("/api/admin/keys", auth, (req, res) => {
-  const rows = db.prepare(`
-    SELECT
-      k.id,
-      k.label,
-      k.expires_at,
-      k.created_at,
-      k.revoked,
-      k.max_devices,
-      (
-        SELECT COUNT(*)
-        FROM key_devices d
-        WHERE d.key_id = k.id
-        AND d.revoked = 0
-      ) AS devices_used
-    FROM keys k
-    ORDER BY k.id DESC
-    LIMIT 200
-  `).all();
+app.get(
+  "/api/admin/keys",
+  auth,
+  (req, res) => {
+    const rows = db.prepare(`
+      SELECT
+        k.id,
+        k.label,
+        k.expires_at,
+        k.created_at,
+        k.revoked,
+        k.max_devices,
+        (
+          SELECT COUNT(*)
+          FROM key_devices d
+          WHERE d.key_id = k.id
+          AND d.revoked = 0
+        ) AS devices_used
+      FROM keys k
+      ORDER BY k.id DESC
+      LIMIT 200
+    `).all();
 
-  res.json(rows);
-});
+    res.json(rows);
+  }
+);
 
 /* =========================================
    REVOKE KEY
 ========================================= */
 
-app.post("/api/admin/keys/:id/revoke", auth, (req, res) => {
-  const id = Number(req.params.id);
+app.post(
+  "/api/admin/keys/:id/revoke",
+  auth,
+  (req, res) => {
+    const id = Number(req.params.id);
 
-  if (!Number.isInteger(id) || id < 1) {
-    return res.status(400).json({
-      ok: false,
-      error: "Invalid key id"
-    });
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid key id"
+      });
+    }
+
+    const result = db.prepare(`
+      UPDATE keys
+      SET revoked = 1
+      WHERE id = ?
+    `).run(id);
+
+    if (!result.changes) {
+      return res.status(404).json({
+        ok: false,
+        error: "Key not found"
+      });
+    }
+
+    res.json({ ok: true });
   }
-
-  const result = db.prepare(`
-    UPDATE keys
-    SET revoked = 1
-    WHERE id = ?
-  `).run(id);
-
-  if (!result.changes) {
-    return res.status(404).json({
-      ok: false,
-      error: "Key not found"
-    });
-  }
-
-  res.json({ ok: true });
-});
+);
 
 /* =========================================
    LIST DEVICES FOR A KEY
 ========================================= */
 
-app.get("/api/admin/keys/:id/devices", auth, (req, res) => {
-  const id = Number(req.params.id);
+app.get(
+  "/api/admin/keys/:id/devices",
+  auth,
+  (req, res) => {
+    const id = Number(req.params.id);
 
-  if (!Number.isInteger(id) || id < 1) {
-    return res.status(400).json({
-      ok: false,
-      error: "Invalid key id"
-    });
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({
+        ok: false,
+        error: "Invalid key id"
+      });
+    }
+
+    const devices = db.prepare(`
+      SELECT
+        id,
+        device_id,
+        ip,
+        created_at,
+        last_seen,
+        revoked
+      FROM key_devices
+      WHERE key_id = ?
+      ORDER BY id DESC
+    `).all(id);
+
+    res.json(devices);
   }
-
-  const devices = db.prepare(`
-    SELECT
-      id,
-      device_id,
-      ip,
-      created_at,
-      last_seen,
-      revoked
-    FROM key_devices
-    WHERE key_id = ?
-    ORDER BY id DESC
-  `).all(id);
-
-  res.json(devices);
-});
+);
 
 /* =========================================
    REMOVE / REVOKE DEVICE
@@ -604,9 +775,16 @@ app.delete(
   auth,
   (req, res) => {
     const id = Number(req.params.id);
-    const deviceId = String(req.params.deviceId || "");
 
-    if (!Number.isInteger(id) || id < 1 || !deviceId) {
+    const deviceId = String(
+      req.params.deviceId || ""
+    );
+
+    if (
+      !Number.isInteger(id) ||
+      id < 1 ||
+      !deviceId
+    ) {
       return res.status(400).json({
         ok: false,
         error: "Invalid device information"
@@ -633,98 +811,110 @@ app.delete(
 );
 
 /* =========================================
-   VERIFY CUSTOMER KEY
-   Every device is registered on first use.
-   Remember my key only saves the key locally.
+   REGISTER DEVICE
 ========================================= */
 
-const registerDevice = db.transaction((record, deviceId, ip) => {
-  const existing = db.prepare(`
-    SELECT id, revoked
-    FROM key_devices
-    WHERE key_id = ?
-    AND device_id = ?
-  `).get(record.id, deviceId);
-
-  if (existing && existing.revoked) {
-    return {
-      success: false,
-      error: "This device has been revoked"
-    };
-  }
-
-  if (existing) {
-    db.prepare(`
-      UPDATE key_devices
-      SET ip = ?, last_seen = ?
+const registerDevice = db.transaction(
+  (record, deviceId, ip) => {
+    const existing = db.prepare(`
+      SELECT id, revoked
+      FROM key_devices
       WHERE key_id = ?
       AND device_id = ?
+    `).get(record.id, deviceId);
+
+    if (existing && existing.revoked) {
+      return {
+        success: false,
+        error: "This device has been revoked"
+      };
+    }
+
+    if (existing) {
+      db.prepare(`
+        UPDATE key_devices
+        SET ip = ?, last_seen = ?
+        WHERE key_id = ?
+        AND device_id = ?
+      `).run(
+        ip,
+        new Date().toISOString(),
+        record.id,
+        deviceId
+      );
+
+      return { success: true };
+    }
+
+    const devicesUsed = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM key_devices
+      WHERE key_id = ?
+      AND revoked = 0
+    `).get(record.id).total;
+
+    if (
+      record.max_devices !== 0 &&
+      devicesUsed >= record.max_devices
+    ) {
+      return {
+        success: false,
+        error: "Device limit reached",
+        devicesUsed
+      };
+    }
+
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO key_devices (
+        key_id,
+        device_id,
+        ip,
+        created_at,
+        last_seen
+      )
+      VALUES (?, ?, ?, ?, ?)
     `).run(
-      ip,
-      new Date().toISOString(),
       record.id,
-      deviceId
+      deviceId,
+      ip,
+      now,
+      now
     );
 
-    return { success: true };
-  }
-
-  const devicesUsed = db.prepare(`
-    SELECT COUNT(*) AS total
-    FROM key_devices
-    WHERE key_id = ?
-    AND revoked = 0
-  `).get(record.id).total;
-
-  if (
-    record.max_devices !== 0 &&
-    devicesUsed >= record.max_devices
-  ) {
     return {
-      success: false,
-      error: "Device limit reached",
-      devicesUsed
+      success: true,
+      devicesUsed: devicesUsed + 1
     };
   }
+);
 
-  const now = new Date().toISOString();
-
-  db.prepare(`
-    INSERT INTO key_devices (
-      key_id,
-      device_id,
-      ip,
-      created_at,
-      last_seen
-    )
-    VALUES (?, ?, ?, ?, ?)
-  `).run(
-    record.id,
-    deviceId,
-    ip,
-    now,
-    now
-  );
-
-  return {
-    success: true,
-    devicesUsed: devicesUsed + 1
-  };
-});
+/* =========================================
+   VERIFY CUSTOMER KEY
+   ONLY NEW WINDIR FORMAT IS ACCEPTED.
+========================================= */
 
 function verifyKey(req, res, next) {
   try {
     const body = req.body || {};
 
-    const key = String(body.key || "").trim();
-    const ip = String(body.ip || "").trim();
-    const deviceId = String(body.deviceId || "").trim();
+    const key = normalizeKey(body.key);
 
-    if (!key) {
-      return res.status(400).json({
+    const ip = String(
+      body.ip || ""
+    ).trim();
+
+    const deviceId = String(
+      body.deviceId || ""
+    ).trim();
+
+    // Reject all old key formats.
+    if (!validWindirKey(key)) {
+      return res.status(403).json({
         ok: false,
         valid: false,
-        error: "Enter a key"
+        error: "Invalid key format. Use WINDIR-XXXX-XXXX-XXXX."
       });
     }
 
@@ -736,7 +926,9 @@ function verifyKey(req, res, next) {
       });
     }
 
-    if (!/^[a-zA-Z0-9_-]{16,128}$/.test(deviceId)) {
+    if (
+      !/^[a-zA-Z0-9_-]{16,128}$/.test(deviceId)
+    ) {
       return res.status(400).json({
         ok: false,
         valid: false,
@@ -762,9 +954,14 @@ function verifyKey(req, res, next) {
       });
     }
 
-    const expiration = Date.parse(record.expires_at || "");
+    const expiration = Date.parse(
+      record.expires_at || ""
+    );
 
-    if (!Number.isFinite(expiration) || Date.now() > expiration) {
+    if (
+      !Number.isFinite(expiration) ||
+      Date.now() > expiration
+    ) {
       return res.status(403).json({
         ok: false,
         valid: false,
@@ -772,9 +969,7 @@ function verifyKey(req, res, next) {
       });
     }
 
-    // IMPORTANT:
-    // Device registration is unconditional.
-    // The Remember checkbox does not control device registration.
+    // Register and verify the device.
     const registration = registerDevice.immediate(
       record,
       deviceId,
@@ -811,10 +1006,19 @@ function verifyKey(req, res, next) {
   }
 }
 
-/* BOTH VERIFICATION ROUTES */
+/* =========================================
+   VERIFICATION ROUTES
+========================================= */
 
-app.post("/api/keys/verify", verifyKey);
-app.post("/api/verify-key", verifyKey);
+app.post(
+  "/api/keys/verify",
+  verifyKey
+);
+
+app.post(
+  "/api/verify-key",
+  verifyKey
+);
 
 /* =========================================
    NOT FOUND
@@ -835,7 +1039,9 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error("API error:", err.message);
 
-  if (res.headersSent) return next(err);
+  if (res.headersSent) {
+    return next(err);
+  }
 
   res.status(500).json({
     ok: false,
@@ -850,5 +1056,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`WINDIR PROXY running on port ${PORT}`);
+  console.log(
+    `WINDIR PROXY running on port ${PORT}`
+  );
 });
