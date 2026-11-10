@@ -1,7 +1,6 @@
 /* =========================================
    WINDIR PROXY - APP.JS
    Customer access + Admin dashboard
-   Proxy / Main / News / Setting
 ========================================= */
 
 "use strict";
@@ -43,8 +42,51 @@ function setText(element, value) {
   if (element) element.textContent = value ?? "";
 }
 
-function escapeText(value) {
-  return String(value ?? "");
+function createElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function formatDate(value) {
+  if (!value) return "Unknown";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleString();
+}
+
+function validIPv4(ip) {
+  const parts = String(ip).trim().split(".");
+  return parts.length === 4 &&
+    parts.every(part =>
+      /^\d{1,3}$/.test(part) &&
+      Number(part) >= 0 &&
+      Number(part) <= 255
+    );
+}
+
+function maskKey(key) {
+  const value = String(key || "");
+  if (!value) return "Not available";
+  if (value.length <= 8) return "••••••••";
+  return `${value.slice(0, 4)}••••••••${value.slice(-4)}`;
+}
+
+function getExpiryTimestamp(value) {
+  if (!value) return null;
+
+  let timestamp = typeof value === "number"
+    ? value
+    : new Date(value).getTime();
+
+  if (!Number.isFinite(timestamp)) return null;
+  if (timestamp > 0 && timestamp < 100000000000) {
+    timestamp *= 1000;
+  }
+
+  return timestamp;
 }
 
 function getDeviceId() {
@@ -70,10 +112,7 @@ async function request(url, options = {}, admin = false) {
 
   if (admin) {
     const token = sessionStorage.getItem(ADMIN_TOKEN_KEY);
-
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
 
   const response = await fetch(url, {
@@ -98,75 +137,9 @@ async function request(url, options = {}, admin = false) {
   return data;
 }
 
-function createElement(tag, className, text) {
-  const element = document.createElement(tag);
-
-  if (className) element.className = className;
-  if (text !== undefined) element.textContent = text;
-
-  return element;
-}
-
-function formatDate(value) {
-  if (!value) return "Unknown";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
-  }
-
-  return date.toLocaleString();
-}
-
-function validIPv4(ip) {
-  const parts = String(ip).trim().split(".");
-
-  return parts.length === 4 &&
-    parts.every(part =>
-      /^\d{1,3}$/.test(part) &&
-      Number(part) >= 0 &&
-      Number(part) <= 255
-    );
-}
-
-function maskKey(key) {
-  const value = String(key || "");
-
-  if (!value) return "Not available";
-  if (value.length <= 8) return "••••••••";
-
-  return `${value.slice(0, 4)}••••••••${value.slice(-4)}`;
-}
-
-function getExpiryTimestamp(value) {
-  if (!value) return null;
-
-  let timestamp;
-
-  if (typeof value === "number") {
-    timestamp = value;
-  } else {
-    timestamp = new Date(value).getTime();
-  }
-
-  if (!Number.isFinite(timestamp)) return null;
-
-  // Accept Unix timestamps in seconds or milliseconds.
-  if (timestamp > 0 && timestamp < 100000000000) {
-    timestamp *= 1000;
-  }
-
-  return timestamp;
-}
-
-/* ---------- CUSTOMER SESSION ---------- */
-
-let activeCustomerKey = "";
-let activeCustomerIP = "";
-let activeCustomerRemember = false;
-let activeExpiry = null;
-let countdownTimer = null;
+/* =========================================
+   CUSTOMER KEY SYSTEM
+========================================= */
 
 const keyInput = $("keyInput");
 const ipInput = $("ipInput");
@@ -175,15 +148,18 @@ const loginButton = $("loginButton");
 const customerStatus = $("status");
 const ipStatus = $("ipStatus");
 
+let activeCustomerKey = "";
+let activeCustomerIP = "";
+let activeCustomerRemember = false;
+let activeExpiry = null;
+let countdownTimer = null;
+
 function customerMessage(message, type = "") {
   setText(customerStatus, message);
 
   if (customerStatus) {
     customerStatus.className = "status";
-
-    if (type) {
-      customerStatus.classList.add(type);
-    }
+    if (type) customerStatus.classList.add(type);
   }
 }
 
@@ -197,44 +173,137 @@ function updateCustomerButton() {
   );
 }
 
-/* ---------- LOGIN SCREEN / MENU ---------- */
+if (keyInput) {
+  keyInput.addEventListener("input", () => {
+    customerMessage("");
+    updateCustomerButton();
+  });
+}
+
+if (ipInput) {
+  ipInput.addEventListener("input", () => {
+    setText(
+      ipStatus,
+      ipInput.value && !validIPv4(ipInput.value)
+        ? "Enter a valid IPv4 address."
+        : ""
+    );
+    updateCustomerButton();
+  });
+}
+
+/* Restore remembered key */
+
+if (keyInput && rememberCheckbox) {
+  const savedKey = localStorage.getItem(STORAGE_KEY);
+
+  if (savedKey) {
+    keyInput.value = savedKey;
+    rememberCheckbox.checked = true;
+  }
+}
+
+/* Detect public IP */
+
+async function detectPublicIP() {
+  const response = await fetch(
+    "https://api.ipify.org?format=json",
+    { cache: "no-store" }
+  );
+
+  if (!response.ok) throw new Error("IP detection failed.");
+
+  const data = await response.json();
+
+  if (!validIPv4(data.ip)) {
+    throw new Error("Invalid IP address.");
+  }
+
+  return data.ip;
+}
+
+const detectIpButton = $("detectIpButton");
+
+if (detectIpButton) {
+  detectIpButton.addEventListener("click", async () => {
+    setText(ipStatus, "Detecting IP...");
+    detectIpButton.disabled = true;
+
+    try {
+      const ip = await detectPublicIP();
+      if (ipInput) ipInput.value = ip;
+
+      setText(ipStatus, "IP detected successfully.");
+      updateCustomerButton();
+    } catch {
+      setText(ipStatus, "Could not detect IP. Enter it manually.");
+    } finally {
+      detectIpButton.disabled = false;
+    }
+  });
+}
+
+/* Clear saved key */
+
+const clearKeyButton = $("clearKey");
+
+if (clearKeyButton) {
+  clearKeyButton.addEventListener("click", () => {
+    localStorage.removeItem(STORAGE_KEY);
+
+    if (keyInput) keyInput.value = "";
+    if (rememberCheckbox) rememberCheckbox.checked = false;
+
+    customerMessage("Saved key cleared.");
+    updateCustomerButton();
+  });
+}
+
+/* ---------- CUSTOMER MENU ---------- */
 
 const loginScreen = firstElement("loginScreen") ||
   document.querySelector(".login-box");
 
 const mainMenu = $("mainMenu");
 
+function activateMenuTab(tabName) {
+  const allowed = ["proxy", "main", "news", "setting"];
+
+  if (!allowed.includes(tabName)) tabName = "proxy";
+
+  document.querySelectorAll("[data-tab]").forEach(button => {
+    const active = button.dataset.tab === tabName;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+
+  allowed.forEach(name => {
+    show($(`tab-${name}`), name === tabName);
+  });
+}
+
+document.querySelectorAll("[data-tab]").forEach(button => {
+  button.addEventListener("click", () => {
+    activateMenuTab(button.dataset.tab);
+  });
+});
+
 function showCustomerMenu(data = {}) {
   show(loginScreen, false);
   show(mainMenu, true);
 
-  if (keyInput?.value.trim()) {
-    activeCustomerKey = keyInput.value.trim();
-  }
-
-  if (ipInput?.value.trim()) {
-    activeCustomerIP = ipInput.value.trim();
-  }
-
+  activeCustomerKey = keyInput?.value.trim() || activeCustomerKey;
+  activeCustomerIP = ipInput?.value.trim() || activeCustomerIP;
   activeCustomerRemember = Boolean(rememberCheckbox?.checked);
 
-  if (data.expires_at || data.expiresAt) {
-    setCustomerExpiry(data.expires_at || data.expiresAt);
-  } else {
-    setCustomerExpiry(null);
-  }
+  setText($("settingKey"), maskKey(activeCustomerKey));
+  setText($("settingIpStatus"), "Verified");
 
-  setText(
-    $("settingKey"),
-    maskKey(activeCustomerKey)
-  );
-
-  if ($("settingIpInput") && activeCustomerIP) {
+  if ($("settingIpInput")) {
     $("settingIpInput").value = activeCustomerIP;
   }
 
-  setText($("settingIpStatus"), "Verified");
-
+  setCustomerExpiry(data.expires_at || data.expiresAt || null);
   activateMenuTab("proxy");
 }
 
@@ -257,104 +326,7 @@ function showCustomerLogin() {
   setText($("settingExpiryDate"), "Unknown");
 }
 
-/* ---------- LOGIN INPUTS ---------- */
-
-if (keyInput) {
-  keyInput.addEventListener("input", () => {
-    customerMessage("");
-    updateCustomerButton();
-  });
-}
-
-if (ipInput) {
-  ipInput.addEventListener("input", () => {
-    if (ipInput.value && !validIPv4(ipInput.value)) {
-      setText(ipStatus, "Enter a valid IPv4 address.");
-    } else {
-      setText(ipStatus, "");
-    }
-
-    updateCustomerButton();
-  });
-}
-
-/* Restore remembered key */
-
-if (keyInput && rememberCheckbox) {
-  const savedKey = localStorage.getItem(STORAGE_KEY);
-
-  if (savedKey) {
-    keyInput.value = savedKey;
-    rememberCheckbox.checked = true;
-  }
-}
-
-/* ---------- PUBLIC IP DETECTION ---------- */
-
-async function detectPublicIP() {
-  const response = await fetch(
-    "https://api.ipify.org?format=json",
-    { cache: "no-store" }
-  );
-
-  if (!response.ok) {
-    throw new Error("IP detection failed.");
-  }
-
-  const data = await response.json();
-
-  if (!validIPv4(data.ip)) {
-    throw new Error("Invalid IP address.");
-  }
-
-  return data.ip;
-}
-
-/* Login screen IP detection */
-
-const detectIpButton = $("detectIpButton");
-
-if (detectIpButton) {
-  detectIpButton.addEventListener("click", async () => {
-    setText(ipStatus, "Detecting IP...");
-    detectIpButton.disabled = true;
-
-    try {
-      const ip = await detectPublicIP();
-
-      if (ipInput) ipInput.value = ip;
-
-      setText(ipStatus, "IP detected successfully.");
-      updateCustomerButton();
-
-    } catch {
-      setText(
-        ipStatus,
-        "Could not detect IP. Enter it manually."
-      );
-    } finally {
-      detectIpButton.disabled = false;
-    }
-  });
-}
-
-/* ---------- CLEAR SAVED KEY ---------- */
-
-const clearKeyButton = $("clearKey");
-
-if (clearKeyButton) {
-  clearKeyButton.addEventListener("click", () => {
-    localStorage.removeItem(STORAGE_KEY);
-
-    if (keyInput) keyInput.value = "";
-    if (rememberCheckbox) rememberCheckbox.checked = false;
-
-    customerMessage("Saved key cleared.");
-    updateCustomerButton();
-  });
-}
-
-/* ---------- VERIFY CUSTOMER KEY ---------- */
+/* Verify key */
 
 if (loginButton) {
   loginButton.addEventListener("click", async () => {
@@ -377,9 +349,7 @@ if (loginButton) {
     try {
       const data = await request(API.verify, {
         method: "POST",
-        headers: {
-          "X-Device": ip
-        },
+        headers: { "X-Device": ip },
         body: JSON.stringify({
           key,
           ip,
@@ -389,9 +359,7 @@ if (loginButton) {
       });
 
       if (data.valid === false) {
-        throw new Error(
-          data.message || "This key is not valid."
-        );
+        throw new Error(data.message || "This key is not valid.");
       }
 
       if (rememberCheckbox?.checked) {
@@ -409,16 +377,10 @@ if (loginButton) {
         "success"
       );
 
-      // Open the menu only after successful server verification.
-      setTimeout(() => {
-        showCustomerMenu(data);
-      }, 450);
+      setTimeout(() => showCustomerMenu(data), 450);
 
     } catch (error) {
-      customerMessage(
-        error.message || "Verification failed.",
-        "error"
-      );
+      customerMessage(error.message || "Verification failed.", "error");
     } finally {
       updateCustomerButton();
     }
@@ -427,45 +389,9 @@ if (loginButton) {
 
 updateCustomerButton();
 
-/* ---------- MENU NAVIGATION ---------- */
-
-function activateMenuTab(tabName) {
-  if (!mainMenu) return;
-
-  const allowedTabs = [
-    "proxy",
-    "main",
-    "news",
-    "setting"
-  ];
-
-  if (!allowedTabs.includes(tabName)) {
-    tabName = "proxy";
-  }
-
-  document.querySelectorAll("[data-tab]").forEach(button => {
-    const active = button.dataset.tab === tabName;
-
-    button.classList.toggle("active", active);
-    button.setAttribute(
-      "aria-selected",
-      active ? "true" : "false"
-    );
-  });
-
-  allowedTabs.forEach(name => {
-    const section = $(`tab-${name}`);
-    show(section, name === tabName);
-  });
-}
-
-document.querySelectorAll("[data-tab]").forEach(button => {
-  button.addEventListener("click", () => {
-    activateMenuTab(button.dataset.tab);
-  });
-});
-
-/* ---------- MAIN: OPTION SWITCHES ---------- */
+/* =========================================
+   MAIN OPTIONS
+========================================= */
 
 const activateOptionsButton = $("activateOptions");
 const optionsMessage = $("optionsMessage");
@@ -474,33 +400,26 @@ function getSelectedOptions() {
   const selected = [];
 
   document.querySelectorAll(".wn-switch").forEach(element => {
-    let enabled = false;
+    const enabled =
+      element instanceof HTMLInputElement
+        ? element.checked
+        : element.classList.contains("active") ||
+          element.getAttribute("aria-checked") === "true" ||
+          element.getAttribute("aria-pressed") === "true";
 
-    if (
-      element instanceof HTMLInputElement &&
-      element.type === "checkbox"
-    ) {
-      enabled = element.checked;
-    } else {
-      enabled =
-        element.classList.contains("active") ||
-        element.getAttribute("aria-checked") === "true" ||
-        element.getAttribute("aria-pressed") === "true";
-    }
+    if (!enabled) return;
 
-    if (enabled) {
-      const card = element.closest(
-        "[data-option], .option-card, .option-item"
-      );
+    const card = element.closest(
+      "[data-option], .option-card, .option-item"
+    );
 
-      const name =
-        card?.dataset.option ||
-        card?.querySelector("strong, .option-name, h3")?.textContent ||
-        element.dataset.option ||
-        "Option";
+    const name =
+      card?.dataset.option ||
+      card?.querySelector("strong, .option-name, h3")?.textContent ||
+      element.dataset.option ||
+      "Option";
 
-      selected.push(name.trim());
-    }
+    selected.push(name.trim());
   });
 
   return selected;
@@ -512,39 +431,22 @@ document.querySelectorAll(".wn-switch").forEach(element => {
     element.type === "checkbox"
   ) {
     element.addEventListener("change", () => {
-      element.setAttribute(
-        "aria-checked",
-        element.checked ? "true" : "false"
-      );
-
-      if (optionsMessage) {
-        optionsMessage.textContent = "";
-        optionsMessage.className = "";
-      }
+      element.setAttribute("aria-checked", String(element.checked));
+      if (optionsMessage) optionsMessage.textContent = "";
     });
   } else {
     element.addEventListener("click", () => {
       const enabled =
-        element.getAttribute("aria-checked") === "true" ||
-        element.getAttribute("aria-pressed") === "true" ||
-        element.classList.contains("active");
+        element.classList.contains("active") ||
+        element.getAttribute("aria-checked") === "true";
 
       const next = !enabled;
 
       element.classList.toggle("active", next);
-      element.setAttribute(
-        "aria-checked",
-        next ? "true" : "false"
-      );
-      element.setAttribute(
-        "aria-pressed",
-        next ? "true" : "false"
-      );
+      element.setAttribute("aria-checked", String(next));
+      element.setAttribute("aria-pressed", String(next));
 
-      if (optionsMessage) {
-        optionsMessage.textContent = "";
-        optionsMessage.className = "";
-      }
+      if (optionsMessage) optionsMessage.textContent = "";
     });
   }
 });
@@ -553,25 +455,22 @@ if (activateOptionsButton) {
   activateOptionsButton.addEventListener("click", () => {
     const selected = getSelectedOptions();
 
-    // These are panel selections only; no external app is modified.
     sessionStorage.setItem(
       "windir_selected_options",
       JSON.stringify(selected)
     );
 
     if (optionsMessage) {
-      optionsMessage.textContent =
-        "Options activated successfully.";
-
-      optionsMessage.className =
-        "success options-success";
+      optionsMessage.textContent = "Options activated successfully.";
+      optionsMessage.className = "success options-success";
     }
   });
 }
 
-/* ---------- PROXY CERTIFICATE BUTTON ---------- */
+/* =========================================
+   PROXY CERTIFICATE
+========================================= */
 
-// Certificate is intentionally not downloadable yet.
 const certificateButton = $("downloadCertificate");
 
 if (certificateButton) {
@@ -580,54 +479,34 @@ if (certificateButton) {
   certificateButton.title = "Certificate will be available later.";
 }
 
-/* ---------- SETTING: KEY INFORMATION ---------- */
-
-function updateSettingKey() {
-  setText(
-    $("settingKey"),
-    maskKey(activeCustomerKey)
-  );
-}
-
-/* ---------- SETTING: IP DETECTION ---------- */
+/* =========================================
+   SETTING - IP DETECTION
+========================================= */
 
 const settingDetectIpButton = $("settingDetectIp");
 
 if (settingDetectIpButton) {
   settingDetectIpButton.addEventListener("click", async () => {
     settingDetectIpButton.disabled = true;
-
-    setText(
-      $("settingIpMessage"),
-      "Detecting your IPv4 address..."
-    );
+    setText($("settingIpMessage"), "Detecting your IPv4 address...");
 
     try {
       const ip = await detectPublicIP();
 
-      const settingInput = $("settingIpInput");
-
-      if (settingInput) {
-        settingInput.value = ip;
+      if ($("settingIpInput")) {
+        $("settingIpInput").value = ip;
       }
 
-      setText(
-        $("settingIpMessage"),
-        "IP detected successfully."
-      );
-
+      setText($("settingIpMessage"), "IP detected successfully.");
     } catch {
-      setText(
-        $("settingIpMessage"),
-        "Could not detect IP. Enter it manually."
-      );
+      setText($("settingIpMessage"), "Could not detect IP. Enter it manually.");
     } finally {
       settingDetectIpButton.disabled = false;
     }
   });
 }
 
-/* ---------- SETTING: VERIFY AND UPDATE IP ---------- */
+/* Update IPv4 by re-verifying the current key */
 
 const settingUpdateIpButton = $("settingUpdateIp");
 
@@ -636,34 +515,22 @@ if (settingUpdateIpButton) {
     const newIP = $("settingIpInput")?.value.trim();
 
     if (!activeCustomerKey) {
-      setText(
-        $("settingIpMessage"),
-        "Your verified session is not available. Log in again."
-      );
+      setText($("settingIpMessage"), "Log in again to verify your session.");
       return;
     }
 
     if (!validIPv4(newIP)) {
-      setText(
-        $("settingIpMessage"),
-        "Enter a valid IPv4 address."
-      );
+      setText($("settingIpMessage"), "Enter a valid IPv4 address.");
       return;
     }
 
     settingUpdateIpButton.disabled = true;
-
-    setText(
-      $("settingIpMessage"),
-      "Verifying your new IPv4 address..."
-    );
+    setText($("settingIpMessage"), "Verifying your new IPv4 address...");
 
     try {
       const data = await request(API.verify, {
         method: "POST",
-        headers: {
-          "X-Device": newIP
-        },
+        headers: { "X-Device": newIP },
         body: JSON.stringify({
           key: activeCustomerKey,
           ip: newIP,
@@ -673,41 +540,28 @@ if (settingUpdateIpButton) {
       });
 
       if (data.valid === false) {
-        throw new Error(
-          data.message || "IPv4 verification failed."
-        );
+        throw new Error(data.message || "IPv4 verification failed.");
       }
 
       activeCustomerIP = newIP;
-
-      setText(
-        $("settingIpStatus"),
-        "Verified"
-      );
-
-      setText(
-        $("settingIpMessage"),
-        "IPv4 verified successfully."
-      );
+      setText($("settingIpStatus"), "Verified");
+      setText($("settingIpMessage"), "IPv4 verified successfully.");
 
       if (data.expires_at || data.expiresAt) {
-        setCustomerExpiry(
-          data.expires_at || data.expiresAt
-        );
+        setCustomerExpiry(data.expires_at || data.expiresAt);
       }
 
     } catch (error) {
-      setText(
-        $("settingIpMessage"),
-        error.message || "Could not update IPv4."
-      );
+      setText($("settingIpMessage"), error.message || "Could not update IPv4.");
     } finally {
       settingUpdateIpButton.disabled = false;
     }
   });
 }
 
-/* ---------- SETTING: KEY EXPIRATION COUNTDOWN ---------- */
+/* =========================================
+   SETTING - EXPIRATION COUNTDOWN
+========================================= */
 
 function setCustomerExpiry(value) {
   activeExpiry = getExpiryTimestamp(value);
@@ -726,10 +580,7 @@ function setCustomerExpiry(value) {
     return;
   }
 
-  setText(
-    expiryDate,
-    new Date(activeExpiry).toLocaleString()
-  );
+  setText(expiryDate, new Date(activeExpiry).toLocaleString());
 
   function updateCountdown() {
     const remaining = activeExpiry - Date.now();
@@ -741,12 +592,11 @@ function setCustomerExpiry(value) {
       return;
     }
 
-    const totalSeconds = Math.floor(remaining / 1000);
-
-    const days = Math.floor(totalSeconds / 86400);
-    const hours = Math.floor((totalSeconds % 86400) / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
+    const total = Math.floor(remaining / 1000);
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
 
     setText(
       countdown,
@@ -758,13 +608,14 @@ function setCustomerExpiry(value) {
   countdownTimer = setInterval(updateCountdown, 1000);
 }
 
-/* ---------- SETTING: LANGUAGE ---------- */
+/* =========================================
+   SETTING - LANGUAGE
+========================================= */
 
 const languageSelect = $("settingLanguage");
 
 const translations = {
   en: {
-    "Options activated successfully.": "Options activated successfully.",
     "Proxy Info": "Proxy Info",
     "Activate Options": "Activate Options",
     "Proxy News": "Proxy News",
@@ -775,9 +626,7 @@ const translations = {
     "Session": "Session",
     "Log Out": "Log Out"
   },
-
   es: {
-    "Options activated successfully.": "Opciones activadas correctamente.",
     "Proxy Info": "Información del Proxy",
     "Activate Options": "Activar opciones",
     "Proxy News": "Noticias del Proxy",
@@ -791,26 +640,19 @@ const translations = {
 };
 
 function applyLanguage(language) {
-  const selected =
-    language === "es" ? "es" : "en";
+  const selected = language === "es" ? "es" : "en";
 
   localStorage.setItem(LANGUAGE_KEY, selected);
   document.documentElement.lang = selected;
 
-  // Elements marked with data-i18n can be translated directly.
   document.querySelectorAll("[data-i18n]").forEach(element => {
     const original = element.dataset.i18n;
     const translated = translations[selected][original];
 
-    if (translated) {
-      element.textContent = translated;
-    }
+    if (translated) element.textContent = translated;
   });
 
-  // Update the language selector when it exists.
-  if (languageSelect) {
-    languageSelect.value = selected;
-  }
+  if (languageSelect) languageSelect.value = selected;
 }
 
 if (languageSelect) {
@@ -821,29 +663,25 @@ if (languageSelect) {
 
 applyLanguage(localStorage.getItem(LANGUAGE_KEY) || "en");
 
-/* ---------- CUSTOMER LOGOUT ---------- */
+/* =========================================
+   CUSTOMER LOGOUT
+========================================= */
 
 const customerLogoutButton = $("customerLogout");
 
 if (customerLogoutButton) {
   customerLogoutButton.addEventListener("click", () => {
-    const confirmed = confirm(
-      "Log out and remove your locally saved key and device data?"
-    );
-
-    if (!confirmed) return;
+    if (!confirm("Log out and remove your locally saved key and device data?")) {
+      return;
+    }
 
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(DEVICE_KEY);
-
     sessionStorage.removeItem("windir_selected_options");
 
     if (keyInput) keyInput.value = "";
     if (ipInput) ipInput.value = "";
-
-    if (rememberCheckbox) {
-      rememberCheckbox.checked = false;
-    }
+    if (rememberCheckbox) rememberCheckbox.checked = false;
 
     setText(ipStatus, "");
     setText($("settingIpMessage"), "");
@@ -855,18 +693,35 @@ if (customerLogoutButton) {
   });
 }
 
-/* ---------- ADMIN MODAL ---------- */
+/* =========================================
+   ADMIN MODAL - CORRECTED BUTTON IDS
+========================================= */
 
 const modal = $("modal");
-const adminOpen = firstElement("adminOpen", "adminButton");
+
+const adminOpen = firstElement(
+  "adminOpen",
+  "adminButton",
+  "admin"
+);
+
 const closeModal = $("close");
 
 function openAdminModal() {
-  show(modal, true);
+  if (!modal) {
+    console.error("ADMIN modal not found. Check the modal ID.");
+    return;
+  }
+
+  modal.classList.remove("hidden");
+  modal.style.display = "flex";
 }
 
 function closeAdminModal() {
-  show(modal, false);
+  if (!modal) return;
+
+  modal.classList.add("hidden");
+  modal.style.display = "";
 }
 
 if (adminOpen) {
@@ -874,6 +729,8 @@ if (adminOpen) {
     openAdminModal();
     await checkAdminSession();
   });
+} else {
+  console.error("ADMIN button not found. Check its HTML ID.");
 }
 
 if (closeModal) {
@@ -888,7 +745,9 @@ if (modal) {
   });
 }
 
-/* ---------- ADMIN LOGIN ---------- */
+/* =========================================
+   ADMIN LOGIN
+========================================= */
 
 const loginView = $("loginView");
 const dashboard = $("dash");
@@ -902,15 +761,8 @@ function showDashboard(user) {
   show(loginView, false);
   show(dashboard, true);
 
-  setText(
-    $("adminName"),
-    user.username || user.name || "Admin"
-  );
-
-  setText(
-    $("adminRole"),
-    user.role || "ADMIN"
-  );
+  setText($("adminName"), user.username || user.name || "Admin");
+  setText($("adminRole"), user.role || "ADMIN");
 
   show(
     $("ownerPanel"),
@@ -949,15 +801,10 @@ if (adminLoginButton) {
       });
 
       if (!data.token) {
-        throw new Error(
-          "Server did not return a login token."
-        );
+        throw new Error("Server did not return a login token.");
       }
 
-      sessionStorage.setItem(
-        ADMIN_TOKEN_KEY,
-        data.token
-      );
+      sessionStorage.setItem(ADMIN_TOKEN_KEY, data.token);
 
       const user = data.user || {
         username,
@@ -968,16 +815,12 @@ if (adminLoginButton) {
       showDashboard(user);
 
     } catch (error) {
-      adminError(
-        error.message || "Login failed."
-      );
+      adminError(error.message || "Login failed.");
     } finally {
       adminLoginButton.disabled = false;
     }
   });
 }
-
-/* Enter key submits admin login */
 
 ["username", "password"].forEach(id => {
   const input = $(id);
@@ -991,8 +834,6 @@ if (adminLoginButton) {
   }
 });
 
-/* Restore admin session */
-
 async function checkAdminSession() {
   const token = sessionStorage.getItem(ADMIN_TOKEN_KEY);
 
@@ -1004,16 +845,16 @@ async function checkAdminSession() {
   try {
     const data = await request(API.me, {}, true);
     const user = data.user || data.admin || data;
-
     showDashboard(user);
-
   } catch {
     sessionStorage.removeItem(ADMIN_TOKEN_KEY);
     showLogin();
   }
 }
 
-/* ---------- ADMIN KEY MANAGEMENT ---------- */
+/* =========================================
+   ADMIN KEY MANAGEMENT
+========================================= */
 
 const makeKeyButton = $("make");
 
@@ -1027,79 +868,49 @@ async function loadKeys() {
 
   try {
     const data = await request(API.keys, {}, true);
-    const keys = Array.isArray(data)
-      ? data
-      : (data.keys || []);
+    const keys = Array.isArray(data) ? data : (data.keys || []);
 
     container.replaceChildren();
 
     if (!keys.length) {
-      container.append(
-        createElement("p", "", "No keys created yet.")
-      );
+      container.append(createElement("p", "", "No keys created yet."));
       return;
     }
 
     keys.forEach(key => {
       const item = createElement("div", "key-item");
 
-      const title = createElement(
-        "strong",
-        "",
-        key.label || "Unassigned key"
-      );
-
+      const title = createElement("strong", "", key.label || "Unassigned key");
       const details = createElement(
-        "p",
-        "",
+        "p", "",
         `Created: ${formatDate(key.created_at || key.createdAt)}`
       );
-
       const expiry = createElement(
-        "p",
-        "",
+        "p", "",
         `Expires: ${formatDate(key.expires_at || key.expiresAt)}`
       );
 
-      const limit = Number(
-        key.max_devices ?? key.maxDevices ?? 1
-      );
+      const limit = Number(key.max_devices ?? key.maxDevices ?? 1);
 
       const devices = createElement(
-        "p",
-        "",
+        "p", "",
         `Device limit: ${limit === 0 ? "Unlimited" : limit}`
       );
 
       const status = createElement(
-        "p",
-        "",
+        "p", "",
         key.revoked ? "REVOKED" : "ACTIVE"
       );
 
       const buttons = createElement("div", "key-actions");
 
-      const viewButton = createElement(
-        "button",
-        "ghost",
-        "VIEW DEVICES"
-      );
-
+      const viewButton = createElement("button", "ghost", "VIEW DEVICES");
       viewButton.type = "button";
-
-      viewButton.addEventListener("click", () => {
-        loadDevices(key.id);
-      });
-
+      viewButton.addEventListener("click", () => loadDevices(key.id));
       buttons.append(viewButton);
 
       if (!key.revoked) {
-        const revokeButton = createElement(
-          "button",
-          "ghost",
-          "REVOKE KEY"
-        );
-
+        const revokeButton = createElement("button", "ghost", "REVOKE KEY");
         revokeButton.type = "button";
 
         revokeButton.addEventListener("click", async () => {
@@ -1108,15 +919,10 @@ async function loadKeys() {
           try {
             await request(
               `${API.keys}/${encodeURIComponent(key.id)}/revoke`,
-              {
-                method: "POST",
-                body: JSON.stringify({})
-              },
+              { method: "POST", body: JSON.stringify({}) },
               true
             );
-
             await loadKeys();
-
           } catch (error) {
             alert(error.message);
           }
@@ -1125,34 +931,20 @@ async function loadKeys() {
         buttons.append(revokeButton);
       }
 
-      item.append(
-        title,
-        details,
-        expiry,
-        devices,
-        status,
-        buttons
-      );
-
+      item.append(title, details, expiry, devices, status, buttons);
       container.append(item);
     });
 
   } catch (error) {
-    container.replaceChildren(
-      createElement("p", "", error.message)
-    );
+    container.replaceChildren(createElement("p", "", error.message));
   }
 }
-
-/* Generate key */
 
 if (makeKeyButton) {
   makeKeyButton.addEventListener("click", async () => {
     const label = $("label")?.value.trim() || "";
     const days = Number($("days")?.value || 7);
-    const maxDevices = Number(
-      $("maxDevices")?.value || 1
-    );
+    const maxDevices = Number($("maxDevices")?.value || 1);
 
     makeKeyButton.disabled = true;
     setText($("newKey"), "Generating key...");
@@ -1160,35 +952,20 @@ if (makeKeyButton) {
     try {
       const data = await request(API.keys, {
         method: "POST",
-        body: JSON.stringify({
-          label,
-          days,
-          maxDevices
-        })
+        body: JSON.stringify({ label, days, maxDevices })
       }, true);
 
       const generated = data.key || data.accessKey;
 
       if (!generated) {
-        throw new Error(
-          "The server did not return the generated key."
-        );
+        throw new Error("The server did not return the generated key.");
       }
 
       const output = $("newKey");
       output.replaceChildren();
 
-      const keyText = createElement(
-        "strong",
-        "",
-        generated
-      );
-
-      const copyButton = createElement(
-        "button",
-        "ghost",
-        "COPY KEY"
-      );
+      const keyText = createElement("strong", "", generated);
+      const copyButton = createElement("button", "ghost", "COPY KEY");
 
       copyButton.type = "button";
 
@@ -1197,18 +974,13 @@ if (makeKeyButton) {
           await navigator.clipboard.writeText(generated);
           copyButton.textContent = "COPIED!";
         } catch {
-          alert(
-            "Could not copy automatically. Select and copy the key."
-          );
+          alert("Could not copy automatically. Select and copy the key.");
         }
       });
 
       output.append(keyText, copyButton);
 
-      if ($("label")) {
-        $("label").value = "";
-      }
-
+      if ($("label")) $("label").value = "";
       await loadKeys();
 
     } catch (error) {
@@ -1219,7 +991,9 @@ if (makeKeyButton) {
   });
 }
 
-/* ---------- DEVICE MANAGEMENT ---------- */
+/* =========================================
+   DEVICE MANAGEMENT
+========================================= */
 
 async function loadDevices(keyId) {
   const container = $("deviceList");
@@ -1236,16 +1010,12 @@ async function loadDevices(keyId) {
       true
     );
 
-    const devices = Array.isArray(data)
-      ? data
-      : (data.devices || []);
+    const devices = Array.isArray(data) ? data : (data.devices || []);
 
     container.replaceChildren();
 
     if (!devices.length) {
-      container.append(
-        createElement("p", "", "No registered devices.")
-      );
+      container.append(createElement("p", "", "No registered devices."));
       return;
     }
 
@@ -1254,38 +1024,24 @@ async function loadDevices(keyId) {
 
       item.append(
         createElement(
-          "strong",
-          "",
+          "strong", "",
           `Device: ${device.device_id || device.deviceId || "Unknown"}`
         ),
+        createElement("p", "", `IP: ${device.ip || "Unknown"}`),
         createElement(
-          "p",
-          "",
-          `IP: ${device.ip || "Unknown"}`
-        ),
-        createElement(
-          "p",
-          "",
+          "p", "",
           `Last seen: ${formatDate(device.last_seen || device.lastSeen)}`
         )
       );
 
       if (!device.revoked) {
-        const revoke = createElement(
-          "button",
-          "ghost",
-          "REMOVE DEVICE"
-        );
-
+        const revoke = createElement("button", "ghost", "REMOVE DEVICE");
         revoke.type = "button";
 
         revoke.addEventListener("click", async () => {
-          if (!confirm("Remove this device from the key?")) {
-            return;
-          }
+          if (!confirm("Remove this device from the key?")) return;
 
-          const deviceId =
-            device.device_id || device.deviceId;
+          const deviceId = device.device_id || device.deviceId;
 
           try {
             await request(
@@ -1296,31 +1052,27 @@ async function loadDevices(keyId) {
 
             await loadDevices(keyId);
             await loadKeys();
-
           } catch (error) {
             alert(error.message);
           }
         });
 
         item.append(revoke);
-
       } else {
-        item.append(
-          createElement("p", "", "DEVICE REVOKED")
-        );
+        item.append(createElement("p", "", "DEVICE REVOKED"));
       }
 
       container.append(item);
     });
 
   } catch (error) {
-    container.replaceChildren(
-      createElement("p", "", error.message)
-    );
+    container.replaceChildren(createElement("p", "", error.message));
   }
 }
 
-/* ---------- OWNER: ADMIN MANAGEMENT ---------- */
+/* =========================================
+   OWNER - ADMIN MANAGEMENT
+========================================= */
 
 const createAdminButton = $("createAdmin");
 
@@ -1334,7 +1086,6 @@ async function loadAdmins() {
 
   try {
     const data = await request(API.admins, {}, true);
-
     const admins = Array.isArray(data)
       ? data
       : (data.users || data.admins || []);
@@ -1342,9 +1093,7 @@ async function loadAdmins() {
     container.replaceChildren();
 
     if (!admins.length) {
-      container.append(
-        createElement("p", "", "No administrators found.")
-      );
+      container.append(createElement("p", "", "No administrators found."));
       return;
     }
 
@@ -1352,31 +1101,16 @@ async function loadAdmins() {
       const item = createElement("div", "admin-item");
 
       item.append(
-        createElement(
-          "strong",
-          "",
-          admin.username || "Unknown"
-        ),
-        createElement(
-          "p",
-          "",
-          `Role: ${admin.role || "ADMIN"}`
-        )
+        createElement("strong", "", admin.username || "Unknown"),
+        createElement("p", "", `Role: ${admin.role || "ADMIN"}`)
       );
 
       if (String(admin.role).toUpperCase() !== "OWNER") {
-        const removeButton = createElement(
-          "button",
-          "ghost",
-          "DELETE ADMIN"
-        );
-
+        const removeButton = createElement("button", "ghost", "DELETE ADMIN");
         removeButton.type = "button";
 
         removeButton.addEventListener("click", async () => {
-          if (!confirm(`Delete admin ${admin.username}?`)) {
-            return;
-          }
+          if (!confirm(`Delete admin ${admin.username}?`)) return;
 
           try {
             await request(
@@ -1384,9 +1118,7 @@ async function loadAdmins() {
               { method: "DELETE" },
               true
             );
-
             await loadAdmins();
-
           } catch (error) {
             alert(error.message);
           }
@@ -1399,13 +1131,9 @@ async function loadAdmins() {
     });
 
   } catch (error) {
-    container.replaceChildren(
-      createElement("p", "", error.message)
-    );
+    container.replaceChildren(createElement("p", "", error.message));
   }
 }
-
-/* Create admin */
 
 if (createAdminButton) {
   createAdminButton.addEventListener("click", async () => {
@@ -1413,27 +1141,17 @@ if (createAdminButton) {
     const password = $("newAdminPassword")?.value;
 
     if (!username || !password) {
-      setText(
-        $("adminMessage"),
-        "Enter username and password."
-      );
+      setText($("adminMessage"), "Enter username and password.");
       return;
     }
 
     if (password.length < 12) {
-      setText(
-        $("adminMessage"),
-        "Password must have at least 12 characters."
-      );
+      setText($("adminMessage"), "Password must have at least 12 characters.");
       return;
     }
 
     createAdminButton.disabled = true;
-
-    setText(
-      $("adminMessage"),
-      "Creating administrator..."
-    );
+    setText($("adminMessage"), "Creating administrator...");
 
     try {
       await request(API.admins, {
@@ -1441,10 +1159,7 @@ if (createAdminButton) {
         body: JSON.stringify({ username, password })
       }, true);
 
-      setText(
-        $("adminMessage"),
-        "Administrator created successfully."
-      );
+      setText($("adminMessage"), "Administrator created successfully.");
 
       $("newAdminUser").value = "";
       $("newAdminPassword").value = "";
@@ -1452,17 +1167,16 @@ if (createAdminButton) {
       await loadAdmins();
 
     } catch (error) {
-      setText(
-        $("adminMessage"),
-        error.message
-      );
+      setText($("adminMessage"), error.message);
     } finally {
       createAdminButton.disabled = false;
     }
   });
 }
 
-/* ---------- ADMIN LOGOUT ---------- */
+/* =========================================
+   ADMIN LOGOUT
+========================================= */
 
 const logoutButton = $("logout");
 
@@ -1478,7 +1192,6 @@ if (logoutButton) {
     }
 
     sessionStorage.removeItem(ADMIN_TOKEN_KEY);
-
     showLogin();
 
     if ($("username")) $("username").value = "";
@@ -1488,11 +1201,12 @@ if (logoutButton) {
   });
 }
 
-/* ---------- BACKGROUND PARTICLES ---------- */
+/* =========================================
+   BACKGROUND PARTICLES
+========================================= */
 
 (function particlesAnimation() {
   const canvas = $("particles");
-
   if (!canvas) return;
 
   const ctx = canvas.getContext("2d");
@@ -1504,17 +1218,13 @@ if (logoutButton) {
   let animationFrame = null;
 
   function resize() {
-    const ratio = Math.min(
-      window.devicePixelRatio || 1,
-      2
-    );
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
 
     width = window.innerWidth;
     height = window.innerHeight;
 
     canvas.width = width * ratio;
     canvas.height = height * ratio;
-
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
 
@@ -1522,22 +1232,16 @@ if (logoutButton) {
 
     const count = Math.min(
       85,
-      Math.max(
-        25,
-        Math.floor(width * height / 14000)
-      )
+      Math.max(25, Math.floor(width * height / 14000))
     );
 
-    particles = Array.from(
-      { length: count },
-      () => ({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        size: Math.random() * 2 + 0.5,
-        speed: Math.random() * 0.35 + 0.08,
-        opacity: Math.random() * 0.5 + 0.15
-      })
-    );
+    particles = Array.from({ length: count }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      size: Math.random() * 2 + 0.5,
+      speed: Math.random() * 0.35 + 0.08,
+      opacity: Math.random() * 0.5 + 0.15
+    }));
   }
 
   function animate() {
@@ -1552,7 +1256,6 @@ if (logoutButton) {
       }
 
       ctx.beginPath();
-
       ctx.arc(
         particle.x,
         particle.y,
@@ -1571,11 +1274,9 @@ if (logoutButton) {
   }
 
   window.addEventListener("resize", resize);
-
   resize();
   animate();
 
-  // Pause animation when the page is not visible.
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       if (animationFrame) {
