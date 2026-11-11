@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#080808">
+  <meta name="theme-color" content="#050b1b">
   <meta name="description" content="WINDIR PROXY Premium Panel">
   <title>WINDIR PROXY</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
-
   <canvas id="particles"></canvas>
   <div class="ambient"></div>
 
@@ -20,12 +19,17 @@
     <header class="header">
       <div class="brand">
         <div class="brand-icon">
-          <span class="code-icon">W</span>
+          <img
+            src="/avatar.jpg"
+            alt="WINDIR PROXY Logo"
+            onerror="this.style.display='none';this.nextElementSibling.style.display='block'"
+          >
+          <span class="code-icon" style="display:none">W</span>
         </div>
 
         <div class="brand-info">
           <h1 id="brand-name">WINDIR PROXY</h1>
-          <span>PREMIUM PANEL</span>
+          <span>PRIVATE VIP ACCESS</span>
         </div>
       </div>
 
@@ -34,76 +38,118 @@
       </button>
     </header>
 
-    <!-- CUSTOMER LOGIN -->
     <main>
 
+      <!-- CUSTOMER LOGIN -->
       <section id="loginScreen" class="login-box">
 
         <div class="section-heading">
           <span class="status-dot"></span>
-          <span>SECURE ACCESS</span>
+          <span>ONLINE PORTAL</span>
         </div>
 
-        <h2>Welcome Back</h2>
+        <div class="welcome-content">
+          <span class="small-label">WELCOME TO WINDIR PROXY</span>
 
-        <p class="description">
-          Enter your access key to connect to WINDIR PROXY.
-        </p>
+          <h2>
+            Your profile.<br>
+            <span class="blue-gradient">Your control.</span>
+          </h2>
 
-        <div class="input-group">
-          <label for="keyInput">ACCESS KEY</label>
-
-          <input
-            id="keyInput"
-            type="text"
-            placeholder="Enter your key"
-            autocomplete="off"
-          >
+          <p class="description">
+            Activate your key and connect directly from your
+            iPhone Wi-Fi Proxy settings.
+          </p>
         </div>
 
-        <div class="input-group">
-          <label for="ipInput">IPV4 ADDRESS</label>
+        <!-- QUICK CONNECTION GUIDE -->
+        <div class="guide-card">
+          <span class="small-label">QUICK CONNECTION GUIDE</span>
 
-          <div class="input-with-button">
+          <div class="guide-step">
+            <span class="guide-number">01</span>
+            <p>Open this panel on your iPhone Wi-Fi.</p>
+          </div>
+
+          <div class="guide-step">
+            <span class="guide-number">02</span>
+            <p>Enter your license key to activate and auto-bind your Wi-Fi IP.</p>
+          </div>
+
+          <div class="guide-step">
+            <span class="guide-number">03</span>
+            <p>In iPhone Wi-Fi Settings → Configure Proxy → Manual, enter your Host and Port.</p>
+          </div>
+        </div>
+
+        <div class="login-box-inner">
+
+          <div class="section-heading">
+            <span class="status-dot"></span>
+            <span>SECURE ACCESS</span>
+          </div>
+
+          <h2>Welcome Back</h2>
+
+          <p class="description">
+            Enter your access key to connect to WINDIR PROXY.
+          </p>
+
+          <div class="input-group">
+            <label for="keyInput">LICENSE KEY</label>
+
             <input
-              id="ipInput"
+              id="keyInput"
               type="text"
-              placeholder="Enter your IPv4"
+              placeholder="WINDIR-3DBE-5105-8A99"
               autocomplete="off"
-              inputmode="decimal"
             >
+          </div>
 
-            <button id="detectIpButton" type="button">
-              Detect
+          <div class="input-group">
+            <label for="ipInput">IPV4 ADDRESS</label>
+
+            <div class="input-with-button">
+              <input
+                id="ipInput"
+                type="text"
+                placeholder="Enter your IPv4"
+                autocomplete="off"
+                inputmode="decimal"
+              >
+
+              <button id="detectIpButton" type="button">
+                Detect
+              </button>
+            </div>
+
+            <p id="ipStatus" class="input-hint"></p>
+          </div>
+
+          <div class="login-options">
+            <label class="remember-option">
+              <input id="saveKey" type="checkbox">
+              <span>Remember key</span>
+            </label>
+
+            <button id="clearKey" type="button" class="text-button">
+              Clear
             </button>
           </div>
 
-          <p id="ipStatus" class="input-hint"></p>
-        </div>
-
-        <div class="login-options">
-          <label class="remember-option">
-            <input id="saveKey" type="checkbox">
-            <span>Remember key</span>
-          </label>
-
-          <button id="clearKey" type="button" class="text-button">
-            Clear
+          <button id="loginButton" class="primary-button" type="button">
+            <span>ENTER KEY</span>
+            <span class="button-arrow">→</span>
           </button>
+
+          <p id="status" class="status-message" aria-live="polite"></p>
+
+          <div class="login-footer">
+            <span>WINDIR PROXY</span>
+            <span>SECURE CONNECTION</span>
+          </div>
+
         </div>
-
-        <button id="loginButton" class="primary-button" type="button">
-          <span>ENTER KEY</span>
-          <span class="button-arrow">→</span>
-        </button>
-
-        <p id="status" class="status-message" aria-live="polite"></p>
-
-        <div class="login-footer">
-          <span>WINDIR PROXY</span>
-          <span>SECURE CONNECTION</span>
-        </div>
-
       </section>
 
       <!-- CUSTOMER MENU -->
@@ -223,7 +269,6 @@
             </div>
 
           </div>
-
         </section>
 
         <!-- MAIN TAB -->
@@ -246,7 +291,7 @@
 
               <label class="option-item">
                 <span class="option-info">
-                  <strong>A Aimbody</strong>
+                  <strong>Aimbody</strong>
                   <small>Enable Aimbody</small>
                 </span>
                 <input class="wn-switch" type="checkbox" value="Aimbody">
@@ -338,7 +383,6 @@
             ></p>
 
           </div>
-
         </section>
 
         <!-- NEWS TAB -->
@@ -347,18 +391,22 @@
           <div class="panel-title">
             <div>
               <span class="small-label">LATEST INFORMATION</span>
-              <h3>News & Updates</h3>
+              <h3>Proxy News</h3>
             </div>
           </div>
+
+          <p class="description">
+            Latest WINDIR PROXY updates, changes and announcements.
+          </p>
 
           <article class="panel-card news-card">
 
             <div class="news-meta">
+              <span>UPDATE</span>
               <span>2026-08-11 17:46</span>
-              <span class="news-important">IMPORTANT</span>
             </div>
 
-            <h3>Important Notice</h3>
+            <h3>Important</h3>
 
             <p>
               When you activate an option with the danger icon, you need
@@ -370,8 +418,8 @@
           <article class="panel-card news-card">
 
             <div class="news-meta">
+              <span>UPDATE</span>
               <span>2026-08-02 18:30</span>
-              <span class="news-tag">TUTORIAL</span>
             </div>
 
             <h3>Proxy Method Tuto</h3>
@@ -394,45 +442,54 @@
         <!-- SETTING TAB -->
         <section id="tab-setting" class="tab-content" hidden>
 
-          <div class="panel-card">
+          <div class="sect">
 
-            <span class="small-label">ACCOUNT</span>
-            <h3>Settings</h3>
+            <h3>Your Key</h3>
+            <p>The key currently connected to this session.</p>
 
-            <div class="info-row">
-              <span>YOUR KEY</span>
-              <strong id="settingKey">Verified</strong>
+            <div class="blur" id="settingKey">
+              Verified
             </div>
 
-            <div class="info-row">
-              <span>IP STATUS</span>
-              <strong id="settingIpStatus">Connected</strong>
-            </div>
+          </div>
 
-            <div class="input-group">
-              <label for="settingIpInput">UPDATE IPV4</label>
+          <div class="sect">
 
-              <div class="input-with-button">
-                <input
-                  id="settingIpInput"
-                  type="text"
-                  placeholder="Enter new IPv4"
-                  inputmode="decimal"
-                >
+            <h3>Connection</h3>
+            <p>Change the IPv4 linked to your key.</p>
 
-                <button id="settingDetectIp" type="button">
-                  Detect
-                </button>
-              </div>
-            </div>
+            <span class="ver">
+              <s></s>
+              Verified
+            </span>
 
-            <button
-              id="settingUpdateIp"
-              class="secondary-button"
-              type="button"
+            <input
+              class="ip"
+              id="settingIpInput"
+              type="text"
+              placeholder="Enter your IPv4"
+              inputmode="decimal"
             >
-              Update IP
-            </button>
+
+            <div class="row">
+
+              <button
+                class="secondary-button button"
+                id="settingDetectIp"
+                type="button"
+              >
+                Auto-detect
+              </button>
+
+              <button
+                class="primary-button button"
+                id="settingUpdateIp"
+                type="button"
+              >
+                Verify &amp; Update IPv4
+              </button>
+
+            </div>
 
             <p
               id="settingIpMessage"
@@ -440,26 +497,46 @@
               aria-live="polite"
             ></p>
 
-            <div class="info-row">
-              <span>KEY EXPIRATION</span>
-              <strong id="settingExpiryDate">Checking...</strong>
+            <strong id="settingIpStatus" hidden>Connected</strong>
+
+          </div>
+
+          <div class="sect">
+
+            <h3>Key Expiration</h3>
+            <p>Remaining time for your verified key.</p>
+
+            <div class="count">
+              <span id="settingExpiryDate">Checking...</span>
+              <small>Expiration information from your key</small>
             </div>
 
-            <div class="input-group">
-              <label for="settingLanguage">LANGUAGE</label>
+          </div>
 
-              <select id="settingLanguage">
-                <option value="en">English</option>
-                <option value="es">Español</option>
-              </select>
-            </div>
+          <div class="sect">
+
+            <h3>Language</h3>
+            <p>Choose the language used by the panel.</p>
+
+            <select class="sel" id="settingLanguage">
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="zh">中文</option>
+            </select>
+
+          </div>
+
+          <div class="sect">
+
+            <h3>Session</h3>
+            <p>Remove the verified session and all locally saved data.</p>
 
             <button
               id="customerLogout"
-              class="danger-button"
+              class="danger-button full"
               type="button"
             >
-              LOG OUT
+              Log Out
             </button>
 
           </div>
@@ -474,7 +551,6 @@
       </section>
 
     </main>
-
   </div>
 
   <!-- ADMIN MODAL -->
@@ -586,18 +662,14 @@
 
         <!-- KEY LIST -->
         <div class="panel-card">
-
           <h3>Manage Keys</h3>
           <div id="keys"></div>
-
         </div>
 
         <!-- DEVICE LIST -->
         <div class="panel-card">
-
           <h3>Connected Devices</h3>
           <div id="deviceList"></div>
-
         </div>
 
         <!-- OWNER PANEL -->
@@ -654,7 +726,6 @@
       </section>
 
     </div>
-
   </div>
 
   <script src="/app.js"></script>
